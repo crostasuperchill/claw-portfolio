@@ -1,0 +1,22 @@
+export const D = {
+  cabinet: { w: 1.02, h: 1.72, d: 0.78 },
+  plinthH: 0.6,
+  playfield: { w: 0.86, d: 0.56, y: 0.72 },
+  glass: { w: 0.92, h: 0.62, y: 1.03, z: 0.39 },
+  capsuleR: 0.075,
+  clawHomeY: 1.24,
+  clawDropY: 1.12,
+  grabTipOffset: -0.16,
+  grabRadius: 0.085,
+  clawScale: 1.25,
+  chute: { x: -0.31, z: 0 },
+  colors: {
+    pink: '#f2a7c3',
+    blue: '#2b4bff',
+    white: '#f6f5f2',
+    red: '#e8262b',
+    yellow: '#ffc21a',
+    bg: '#e9e9e7',
+    ink: '#17150f',
+  },
+} as const;

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="theme-color" content="#E9E9E7" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>Davide Barbieri — Prize Catcher</title>
+    <meta
+      name="description"
+      content="A playable portfolio: catch Davide's projects with a UFO catcher claw."
+    />
+    <meta property="og:title" content="Davide Barbieri — Prize Catcher" />
+    <meta
+      property="og:description"
+      content="Six projects, one claw machine. Aim, drop, collect."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23f2a7c3'/%3E%3Cpath d='M32 14v16M32 30l-9 8M32 30l9 8' stroke='%232b4bff' stroke-width='4' stroke-linecap='round'/%3E%3Ccircle cx='32' cy='46' r='6' fill='%23ffc21a'/%3E%3C/svg%3E"
+    />
+  </head>
+  <body>
+    <canvas id="stage"></canvas>
+
+    <div id="boot">
+      <div class="boot-inner">
+        <div class="boot-mark">けんびき</div>
+        <div class="boot-bar"><i id="boot-fill"></i></div>
+        <div id="boot-label">warming up the claw</div>
+      </div>
+    </div>
+
+    <header id="hud">
+      <div class="hud-left">
+        <div id="hud-dots"></div>
+        <div id="hud-count">0/6</div>
+      </div>
+      <button id="btn-mute" aria-label="Toggle sound" aria-pressed="false">♪</button>
+    </header>
+
+    <div id="hint">drag to aim · tap the button to drop</div>
+
+    <section id="card" aria-hidden="true">
+      <div id="card-color"></div>
+      <button id="card-close" aria-label="Close">×</button>
+      <p id="card-kicker">prize unlocked</p>
+      <h2 id="card-title"></h2>
+      <p id="card-line"></p>
+      <p id="card-blurb"></p>
+      <div id="card-tags"></div>
+      <a id="card-cta" href="#" target="_blank" rel="noopener"></a>
+      <button id="card-next">Continue playing</button>
+    </section>
+
+    <footer id="all-projects">
+      <a href="https://magicwall.davide.fyi">MagicWall</a>
+      <a href="https://jollycat.app">Jollycat</a>
+      <a href="https://zora.co/collect/zora:0x6a6addd12dccc8a6d8c68a0a927eb7dda0200a3f/1">ZORA Cartridges</a>
+      <a href="https://davide.fyi">Oracle</a>
+      <a href="https://www.instagram.com/davidebarbieri/">Polaroids</a>
+      <a href="mailto:hello@davide.fyi">Say hi</a>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
