@@ -45,7 +45,7 @@ export function createStudio(canvas: HTMLCanvasElement) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.02;
-  renderer.transmissionResolutionScale = 0.45;
+  renderer.transmissionResolutionScale = 0.85;
   renderer.shadowMap.enabled = !new URLSearchParams(location.search).has('noshadow');
   renderer.shadowMap.type = THREE.PCFShadowMap;
 
@@ -134,18 +134,19 @@ export function createStudio(canvas: HTMLCanvasElement) {
   function fitCamera() {
     const aspect = innerWidth / innerHeight;
     camera.aspect = aspect;
-    // vista frontale quasi ortografica, come la macchina reale in foto
-    const fov = 21;
+    // vista da persona in piedi davanti al cabinato: leggermente dall'alto,
+    // così deck, levetta e pulsante si leggono in prospettiva
+    const fov = 23;
     camera.fov = fov;
-    const target = new THREE.Vector3(0, 0.84, 0);
-    const size = new THREE.Vector3(1.04, 1.75, 0.9);
+    const target = new THREE.Vector3(0, 0.76, 0);
+    const size = new THREE.Vector3(1.04, 1.72, 0.9);
     const vFov = THREE.MathUtils.degToRad(fov);
     const distV = size.y / (2 * Math.tan(vFov / 2));
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
     const distH = size.x / (2 * Math.tan(hFov / 2));
-    const dist = Math.max(distV, distH) * (aspect < 1 ? 1.06 : 1.02);
-    camera.position.set(0, 1.02, target.z + dist);
-    camera.lookAt(target.x, target.y + 0.02, target.z);
+    const dist = Math.max(distV, distH) * (aspect < 1 ? 1.1 : 1.04);
+    camera.position.set(0, target.y + dist * 0.3, target.z + dist);
+    camera.lookAt(target.x, target.y, target.z);
     camera.updateProjectionMatrix();
   }
   fitCamera();

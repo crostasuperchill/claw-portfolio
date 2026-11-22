@@ -43,18 +43,20 @@ export function createControls(opts: {
   }
 
   function nearStick(e: PointerEvent) {
-    const c = opts.stickCenter();
     const r = opts.canvas.getBoundingClientRect();
-    const dx = e.clientX - (r.left + c.x);
-    const dy = e.clientY - (r.top + c.y);
-    return Math.hypot(dx, dy) < STICK_RADIUS * 1.35;
+    const localX = e.clientX - r.left;
+    const localY = e.clientY - r.top;
+    const c = opts.stickCenter();
+    const d = Math.hypot(localX - c.x, localY - c.y);
+    if (d < STICK_RADIUS * 1.6) return true;
+    // zona comandi: tutto il terzo basso dello schermo inclina la levetta.
+    // così l'input funziona anche se il modello della levetta cambia forma.
+    return localY > r.height * 0.62 && localY < r.height * 0.94;
   }
 
   function emit(clientX: number, clientY: number) {
-    const r = opts.canvas.getBoundingClientRect();
-    const c = opts.stickCenter();
-    let dx = clientX - (r.left + c.x);
-    let dy = clientY - (r.top + c.y);
+    let dx = clientX - startX;
+    let dy = clientY - startY;
     const len = Math.hypot(dx, dy);
     if (len > STICK_RADIUS) {
       dx = (dx / len) * STICK_RADIUS;

@@ -296,6 +296,25 @@ async function boot() {
     requestAnimationFrame(frame);
   }
 
+  // Il transmission di three sfoca tutto quello che sta dietro: con vetro e
+  // capsule in trasmissione l'interno della teca diventa illeggibile.
+  // Vetro "finto": trasparenza bassa + riflessi dell'ambiente, ma contenuto nitido.
+  studio.scene.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    const mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as
+      | THREE.MeshPhysicalMaterial
+      | undefined;
+    if (!mat || !('transmission' in mat) || !mat.transmission) return;
+    mat.transmission = 0;
+    mat.transparent = true;
+    mat.opacity = 0.07;
+    mat.depthWrite = false;
+    mat.envMapIntensity = Math.max(mat.envMapIntensity ?? 1, 1.5);
+    mat.needsUpdate = true;
+  });
+
+  studio.renderer.compile(studio.scene, studio.camera);
+
   requestAnimationFrame((t) => {
     last = t;
     frame(t);
@@ -328,6 +347,7 @@ async function boot() {
       return { meshes, buckets: Object.entries(out).sort((a, b) => b[1] - a[1]).slice(0, 12) };
     },
     probe: () => claw.probe(),
+    target: () => ({ x: claw.target.x, z: claw.target.y }),
     debug: () => ({
       grabbed: claw.grabbed?.projectId ?? null,
       joint: claw.hasJoint,
