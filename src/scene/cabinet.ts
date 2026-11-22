@@ -1,373 +1,910 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import {
-  PALETTE,
-  anodized,
-  brushedMetal,
-  chrome,
-  clearAcrylic,
-  glow,
-  matte,
-  microRoughness,
-  plastic,
-  rubber,
-  smokedAcrylic,
-} from './materials';
+import { CAB, backlit, candy, chrome, glow, matte, printed, rubber } from './materials';
 import { decalMesh } from './decals';
 import type { UvRect } from '../contracts';
 
 /* ------------------------------------------------------------------ */
-/* textures                                                            */
+/* fonts + canvas helpers                                              */
 /* ------------------------------------------------------------------ */
 
-let marqueeTex: THREE.Texture | null = null;
+const JP = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", sans-serif';
+const ROUND = '"Arial Rounded MT Bold", "Arial Black", Inter, Helvetica, sans-serif';
 
-function marqueeTexture() {
-  if (marqueeTex) return marqueeTex;
+function canvas(w: number, h: number) {
   const c = document.createElement('canvas');
-  c.width = 1024;
-  c.height = 320;
-  const g = c.getContext('2d')!;
+  c.width = w;
+  c.height = h;
+  return c;
+}
 
-  // lit acrylic: gradient + diffuser ribs, not a flat fill
-  const grad = g.createLinearGradient(0, 0, 0, 320);
-  grad.addColorStop(0, '#3357ff');
-  grad.addColorStop(0.55, '#2440ef');
-  grad.addColorStop(1, '#16249c');
-  g.fillStyle = grad;
-  g.fillRect(0, 0, 1024, 320);
+function texture(c: HTMLCanvasElement) {
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
 
-  const hot = g.createRadialGradient(512, 128, 30, 512, 128, 430);
-  hot.addColorStop(0, 'rgba(255,255,255,0.18)');
-  hot.addColorStop(0.55, 'rgba(255,255,255,0.06)');
-  hot.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = hot;
-  g.fillRect(0, 0, 1024, 320);
+function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  g.beginPath();
+  g.roundRect(x, y, w, h, Math.min(r, w / 2, h / 2));
+}
 
-  for (let x = 0; x < 1024; x += 6) {
-    g.fillStyle = 'rgba(255,255,255,0.035)';
-    g.fillRect(x, 0, 1, 320);
+function fitFont(
+  g: CanvasRenderingContext2D,
+  text: string,
+  maxW: number,
+  size: number,
+  weight: number,
+  family = JP
+) {
+  let s = size;
+  g.font = `${weight} ${s}px ${family}`;
+  while (s > 8 && g.measureText(text).width > maxW) {
+    s -= 2;
+    g.font = `${weight} ${s}px ${family}`;
   }
-
-  const vig = g.createLinearGradient(0, 0, 0, 320);
-  vig.addColorStop(0, 'rgba(0,0,0,0.20)');
-  vig.addColorStop(0.22, 'rgba(0,0,0,0)');
-  vig.addColorStop(0.8, 'rgba(0,0,0,0)');
-  vig.addColorStop(1, 'rgba(0,0,0,0.26)');
-  g.fillStyle = vig;
-  g.fillRect(0, 0, 1024, 320);
-
-  g.strokeStyle = 'rgba(255,255,255,0.16)';
-  g.lineWidth = 3;
-  g.strokeRect(16, 14, 992, 292);
-
-  g.fillStyle = '#ffffff';
-  g.font = '800 132px Inter, Helvetica, Arial, sans-serif';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillText('DAVIDE', 512, 118);
-
-  g.fillStyle = '#ffc21a';
-  g.font = '700 46px Inter, Helvetica, Arial, sans-serif';
-  g.letterSpacing = '14px';
-  g.fillText('PRIZE CATCHER', 512, 216);
-
-  g.fillStyle = 'rgba(255,255,255,.6)';
-  g.font = '600 34px "Hiragino Sans", Inter, sans-serif';
-  g.fillText('けんびき', 512, 278);
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  marqueeTex = tex;
-  return tex;
+  return s;
 }
 
-function haloTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 256;
-  const g = c.getContext('2d')!;
-  const rg = g.createRadialGradient(128, 128, 8, 128, 128, 126);
-  rg.addColorStop(0, 'rgba(255,255,255,0.10)');
-  rg.addColorStop(0.3, 'rgba(255,255,255,0.06)');
-  rg.addColorStop(0.46, 'rgba(255,255,255,0.34)');
-  rg.addColorStop(0.62, 'rgba(255,255,255,0.16)');
-  rg.addColorStop(0.82, 'rgba(255,255,255,0.03)');
-  rg.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = rg;
-  g.fillRect(0, 0, 256, 256);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
+/* ---------- mascots (vector, so they stay crisp at any atlas size) ---------- */
 
-function spillTexture() {
-  const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 128;
-  const g = c.getContext('2d')!;
-  const lg = g.createLinearGradient(0, 0, 0, 128);
-  lg.addColorStop(0, 'rgba(255,255,255,0.55)');
-  lg.addColorStop(0.5, 'rgba(255,255,255,0.16)');
-  lg.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = lg;
-  g.fillRect(0, 0, 256, 128);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
+function drawUfo(g: CanvasRenderingContext2D, x: number, y: number, s = 1, beam = false) {
+  g.save();
+  g.translate(x, y);
+  g.scale(s, s);
+  g.lineJoin = 'round';
 
-/** soft specular band for glass / smoked acrylic */
-function streakTexture() {
-  const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 32;
-  const g = c.getContext('2d')!;
-  const lg = g.createLinearGradient(0, 0, 256, 0);
-  lg.addColorStop(0, 'rgba(255,255,255,0)');
-  lg.addColorStop(0.42, 'rgba(255,255,255,0.75)');
-  lg.addColorStop(0.58, 'rgba(255,255,255,0.55)');
-  lg.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = lg;
-  g.fillRect(0, 0, 256, 32);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
-
-/** irregular smudge / scuff mask */
-function scuffTexture() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 128;
-  const g = c.getContext('2d')!;
-  let s = 0x51f0c;
-  const rnd = () => {
-    s = (s * 1664525 + 1013904223) >>> 0;
-    return s / 4294967296;
-  };
-  for (let i = 0; i < 34; i++) {
-    const x = 20 + rnd() * 88;
-    const y = 30 + rnd() * 68;
-    const rx = 2 + rnd() * 14;
-    const ry = 1 + rnd() * 5;
-    g.fillStyle = `rgba(255,255,255,${0.05 + rnd() * 0.14})`;
+  if (beam) {
+    const beamGrad = g.createLinearGradient(0, 26, 0, 130);
+    beamGrad.addColorStop(0, 'rgba(150,245,255,0.65)');
+    beamGrad.addColorStop(1, 'rgba(150,245,255,0)');
+    g.fillStyle = beamGrad;
     g.beginPath();
-    g.ellipse(x, y, rx, ry, (rnd() - 0.5) * 1.2, 0, Math.PI * 2);
+    g.moveTo(-20, 24);
+    g.lineTo(20, 24);
+    g.lineTo(56, 132);
+    g.lineTo(-56, 132);
+    g.closePath();
     g.fill();
   }
-  for (let i = 0; i < 10; i++) {
-    g.strokeStyle = `rgba(255,255,255,${0.1 + rnd() * 0.2})`;
-    g.lineWidth = 0.8 + rnd() * 1.2;
-    const x = 15 + rnd() * 80;
-    const y = 40 + rnd() * 55;
-    g.beginPath();
-    g.moveTo(x, y);
-    g.lineTo(x + 10 + rnd() * 30, y + (rnd() - 0.5) * 4);
-    g.stroke();
-  }
-  // keep it edge-soft
-  const vg = g.createRadialGradient(64, 64, 20, 64, 64, 64);
-  vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(0,0,0,1)');
-  g.globalCompositeOperation = 'destination-out';
-  g.fillStyle = vg;
-  g.fillRect(0, 0, 128, 128);
-  g.globalCompositeOperation = 'source-over';
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
-}
 
-function torxTexture() {
-  const s = 128;
-  const c = document.createElement('canvas');
-  c.width = c.height = s;
-  const g = c.getContext('2d')!;
-  const rg = g.createRadialGradient(s * 0.36, s * 0.32, 2, s * 0.5, s * 0.5, s * 0.5);
-  rg.addColorStop(0, '#f0f2f4');
-  rg.addColorStop(0.55, '#c2c6ca');
-  rg.addColorStop(1, '#7d8288');
-  g.fillStyle = rg;
+  // glass dome
+  g.fillStyle = '#d9f8ff';
+  g.strokeStyle = '#6fc9ea';
+  g.lineWidth = 4;
   g.beginPath();
-  g.arc(s / 2, s / 2, s / 2 - 1, 0, Math.PI * 2);
+  g.ellipse(0, 2, 34, 30, 0, Math.PI, Math.PI * 2);
   g.fill();
-
-  g.strokeStyle = 'rgba(0,0,0,0.35)';
-  g.lineWidth = 3;
-  g.beginPath();
-  g.arc(s / 2, s / 2, s / 2 - 5, 0, Math.PI * 2);
   g.stroke();
 
-  // six-lobe torx recess
-  g.fillStyle = '#262421';
+  // alien pilot
+  g.fillStyle = '#7ee081';
   g.beginPath();
-  for (let i = 0; i < 12; i++) {
-    const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
-    const r = i % 2 === 0 ? s * 0.2 : s * 0.105;
-    const x = s / 2 + Math.cos(a) * r;
-    const y = s / 2 + Math.sin(a) * r;
-    if (i === 0) g.moveTo(x, y);
-    else g.lineTo(x, y);
+  g.ellipse(0, -4, 13, 15, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#1e2a22';
+  for (const sx of [-1, 1]) {
+    g.beginPath();
+    g.ellipse(sx * 4.6, -6, 2.6, 4, 0, 0, Math.PI * 2);
+    g.fill();
   }
+  g.strokeStyle = '#7ee081';
+  g.lineWidth = 2.4;
+  for (const sx of [-1, 1]) {
+    g.beginPath();
+    g.moveTo(sx * 6, -17);
+    g.lineTo(sx * 10, -25);
+    g.stroke();
+    g.fillStyle = '#ffd21e';
+    g.beginPath();
+    g.arc(sx * 10, -26, 2.6, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  // saucer
+  g.fillStyle = '#a97bff';
+  g.strokeStyle = '#6b3fd4';
+  g.lineWidth = 5;
+  g.beginPath();
+  g.ellipse(0, 16, 62, 19, 0, 0, Math.PI * 2);
+  g.fill();
+  g.stroke();
+  g.fillStyle = '#c9a6ff';
+  g.beginPath();
+  g.ellipse(0, 10, 46, 10, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#8a5cf0';
+  g.beginPath();
+  g.ellipse(0, 25, 36, 8, 0, 0, Math.PI * 2);
+  g.fill();
+
+  // running lights
+  const lights = ['#ffd21e', '#ff7fb2', '#7bf4ff', '#ffd21e', '#9bffb5'];
+  lights.forEach((col, i) => {
+    g.fillStyle = col;
+    g.beginPath();
+    g.arc(-36 + i * 18, 27, 4.2, 0, Math.PI * 2);
+    g.fill();
+  });
+
+  // highlight
+  g.strokeStyle = 'rgba(255,255,255,0.85)';
+  g.lineWidth = 3.4;
+  g.beginPath();
+  g.arc(-8, -8, 18, Math.PI * 1.08, Math.PI * 1.62);
+  g.stroke();
+
+  g.restore();
+}
+
+function drawCat(g: CanvasRenderingContext2D, x: number, y: number, s = 1) {
+  g.save();
+  g.translate(x, y);
+  g.scale(s, s);
+  g.lineJoin = 'round';
+
+  // ears
+  g.fillStyle = '#fbeef2';
+  g.strokeStyle = '#e7a4bc';
+  g.lineWidth = 3.4;
+  for (const sx of [-1, 1]) {
+    g.beginPath();
+    g.moveTo(sx * 34, -22);
+    g.lineTo(sx * 24, -58);
+    g.lineTo(sx * 4, -36);
+    g.closePath();
+    g.fill();
+    g.stroke();
+  }
+  g.fillStyle = '#ffb6cd';
+  for (const sx of [-1, 1]) {
+    g.beginPath();
+    g.moveTo(sx * 29, -28);
+    g.lineTo(sx * 24, -48);
+    g.lineTo(sx * 12, -35);
+    g.closePath();
+    g.fill();
+  }
+
+  // head
+  g.fillStyle = '#fffdfd';
+  g.strokeStyle = '#e7a4bc';
+  g.lineWidth = 3.6;
+  g.beginPath();
+  g.ellipse(0, 0, 46, 41, 0, 0, Math.PI * 2);
+  g.fill();
+  g.stroke();
+
+  // blush
+  g.fillStyle = 'rgba(255,150,185,0.55)';
+  for (const sx of [-1, 1]) {
+    g.beginPath();
+    g.ellipse(sx * 29, 9, 8, 5, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  // eyes + nose
+  g.fillStyle = '#231a22';
+  for (const sx of [-1, 1]) {
+    g.beginPath();
+    g.ellipse(sx * 15, -4, 4.4, 6.2, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.fillStyle = '#ee7fa4';
+  g.beginPath();
+  g.moveTo(0, 9);
+  g.lineTo(-5, 3);
+  g.lineTo(5, 3);
   g.closePath();
   g.fill();
 
-  g.strokeStyle = 'rgba(255,255,255,0.35)';
-  g.lineWidth = 2;
+  // mouth
+  g.strokeStyle = '#7a4155';
+  g.lineWidth = 2.4;
   g.beginPath();
-  g.arc(s / 2, s / 2, s * 0.26, 0, Math.PI * 2);
+  g.arc(-5, 11, 6, 0.05 * Math.PI, 0.95 * Math.PI);
+  g.stroke();
+  g.beginPath();
+  g.arc(5, 11, 6, 0.05 * Math.PI, 0.95 * Math.PI);
   g.stroke();
 
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  // whiskers
+  g.strokeStyle = 'rgba(120,70,90,0.45)';
+  g.lineWidth = 2;
+  for (const sx of [-1, 1]) {
+    for (const k of [-1, 0, 1]) {
+      g.beginPath();
+      g.moveTo(sx * 20, 8 + k * 4);
+      g.lineTo(sx * 45, 3 + k * 8);
+      g.stroke();
+    }
+  }
+
+  // collar
+  g.strokeStyle = '#4d8fe0';
+  g.lineWidth = 7;
+  g.beginPath();
+  g.arc(0, 30, 32, 0.16 * Math.PI, 0.84 * Math.PI);
+  g.stroke();
+  g.fillStyle = '#ffd21e';
+  g.strokeStyle = '#c99e00';
+  g.lineWidth = 2;
+  g.beginPath();
+  g.arc(0, 48, 7, 0, Math.PI * 2);
+  g.fill();
+  g.stroke();
+
+  g.restore();
+}
+
+function drawStar(g: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string) {
+  g.save();
+  g.translate(x, y);
+  g.fillStyle = fill;
+  g.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+    const rr = i % 2 === 0 ? r : r * 0.44;
+    const px = Math.cos(a) * rr;
+    const py = Math.sin(a) * rr;
+    if (i === 0) g.moveTo(px, py);
+    else g.lineTo(px, py);
+  }
+  g.closePath();
+  g.fill();
+  g.restore();
+}
+
+function drawSparkle(g: CanvasRenderingContext2D, x: number, y: number, r: number, color: string) {
+  g.save();
+  g.translate(x, y);
+  g.fillStyle = color;
+  g.beginPath();
+  g.moveTo(0, -r);
+  g.quadraticCurveTo(r * 0.18, -r * 0.18, r, 0);
+  g.quadraticCurveTo(r * 0.18, r * 0.18, 0, r);
+  g.quadraticCurveTo(-r * 0.18, r * 0.18, -r, 0);
+  g.quadraticCurveTo(-r * 0.18, -r * 0.18, 0, -r);
+  g.fill();
+  g.restore();
+}
+
+/* ------------------------------------------------------------------ */
+/* printed panels                                                      */
+/* ------------------------------------------------------------------ */
+
+export function marqueeTexture() {
+  const c = canvas(1440, 420);
+  const g = c.getContext('2d')!;
+
+  const bg = g.createLinearGradient(0, 0, 0, 420);
+  bg.addColorStop(0, '#dcf9ff');
+  bg.addColorStop(0.36, '#9ce6fb');
+  bg.addColorStop(0.72, '#63ccf4');
+  bg.addColorStop(1, '#43b6e6');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 1440, 420);
+
+  // diffuser glow
+  const hot = g.createRadialGradient(720, 190, 30, 720, 190, 650);
+  hot.addColorStop(0, 'rgba(255,255,255,0.75)');
+  hot.addColorStop(0.5, 'rgba(255,255,255,0.22)');
+  hot.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = hot;
+  g.fillRect(0, 0, 1440, 420);
+
+  // faint dot screen, like printed acrylic
+  g.fillStyle = 'rgba(255,255,255,0.18)';
+  for (let y = 18; y < 420; y += 16) {
+    for (let x = 18 + ((y / 16) % 2) * 8; x < 1440; x += 16) {
+      g.beginPath();
+      g.arc(x, y, 1.3, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+
+  // frame
+  g.strokeStyle = 'rgba(255,255,255,0.95)';
+  g.lineWidth = 7;
+  roundRect(g, 16, 16, 1408, 388, 26);
+  g.stroke();
+  g.strokeStyle = 'rgba(217,79,139,0.5)';
+  g.lineWidth = 3;
+  roundRect(g, 32, 32, 1376, 356, 20);
+  g.stroke();
+
+  // corner stars
+  drawSparkle(g, 52, 52, 18, 'rgba(255,255,255,0.9)');
+  drawSparkle(g, 1388, 52, 14, 'rgba(255,255,255,0.8)');
+  drawSparkle(g, 1386, 372, 18, 'rgba(255,255,255,0.75)');
+
+  // headline: chunky white bubble letters, hot-pink rim, deep-pink print shadow
+  const headline = 'UFO PORTFOLIO';
+  const size = fitFont(g, headline, 1010, 134, 900, ROUND);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.font = `900 ${size}px ${ROUND}`;
+  g.fillStyle = 'rgba(180,35,100,0.42)';
+  g.fillText(headline, 728, 266);
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 34;
+  g.strokeText(headline, 720, 254);
+  g.strokeStyle = '#e2558f';
+  g.lineWidth = 19;
+  g.strokeText(headline, 720, 254);
+  g.fillStyle = '#ffffff';
+  g.fillText(headline, 720, 254);
+  g.strokeStyle = 'rgba(216,240,255,0.65)';
+  g.lineWidth = 5;
+  g.strokeText(headline, 715, 246);
+
+  // UFO mascot, top-left
+  drawUfo(g, 98, 78, 1.02, false);
+
+  // たんけんちゅう sticker
+  g.save();
+  g.translate(206, 168);
+  g.rotate(-0.08);
+  g.shadowColor = 'rgba(90,20,55,0.28)';
+  g.shadowBlur = 10;
+  g.shadowOffsetY = 6;
+  g.fillStyle = '#dd7ba6';
+  roundRect(g, -146, -31, 292, 62, 31);
+  g.fill();
+  g.shadowColor = 'transparent';
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 5;
+  roundRect(g, -142, -27, 284, 54, 27);
+  g.stroke();
+  g.fillStyle = '#ffffff';
+  g.font = `800 32px ${JP}`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText('たんけんちゅう', 0, 2);
+  g.restore();
+
+  // vertical ポートフォリオ, right edge
+  const chars = 'ポートフォリオ';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.font = `900 36px ${JP}`;
+  for (let i = 0; i < chars.length; i++) {
+    const y = 56 + i * 44;
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 7;
+    g.strokeText(chars[i], 1378, y);
+    g.fillStyle = '#d94f8b';
+    g.fillText(chars[i], 1378, y);
+  }
+  g.fillStyle = '#ffffff';
+  for (const y of [30, 396]) {
+    g.beginPath();
+    g.arc(1378, y, 5, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  // cat mascot, bottom-right
+  drawCat(g, 1248, 358, 0.92);
+
+  const t = texture(c);
   return t;
+}
+
+export function headerTexture() {
+  const c = canvas(2048, 248);
+  const g = c.getContext('2d')!;
+
+  const bg = g.createLinearGradient(0, 0, 0, 248);
+  bg.addColorStop(0, '#4a9ae0');
+  bg.addColorStop(0.45, '#2f7fce');
+  bg.addColorStop(1, '#1f65b8');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 2048, 248);
+
+  // soft diagonal sheen
+  g.save();
+  g.globalAlpha = 0.1;
+  g.fillStyle = '#ffffff';
+  for (let i = -240; i < 2048; i += 92) {
+    g.beginPath();
+    g.moveTo(i, 0);
+    g.lineTo(i + 40, 0);
+    g.lineTo(i - 120, 248);
+    g.lineTo(i - 160, 248);
+    g.fill();
+  }
+  g.restore();
+
+  // light rails top / bottom
+  g.fillStyle = '#eaf9ff';
+  g.fillRect(0, 0, 2048, 7);
+  g.fillStyle = 'rgba(255,255,255,0.5)';
+  g.fillRect(0, 7, 2048, 3);
+  g.fillStyle = '#bde6ff';
+  g.fillRect(0, 241, 2048, 7);
+  g.fillStyle = 'rgba(0,40,90,0.28)';
+  g.fillRect(0, 234, 2048, 3);
+
+  // left sticker cluster
+  g.save();
+  g.shadowColor = 'rgba(15,30,80,0.3)';
+  g.shadowBlur = 8;
+  g.shadowOffsetY = 4;
+  const cluster: [number, number, number, string][] = [
+    [128, 146, 44, '#ffe6f0'],
+    [176, 112, 40, '#ffffff'],
+    [214, 160, 38, '#ffe0a8'],
+  ];
+  for (const [x, y, r, col] of cluster) {
+    g.fillStyle = col;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 5;
+    g.stroke();
+  }
+  g.shadowColor = 'transparent';
+  drawCat(g, 176, 112, 0.42);
+  // strawberry
+  g.fillStyle = '#e8262b';
+  g.beginPath();
+  g.ellipse(214, 170, 17, 20, 0, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#4fae4a';
+  g.beginPath();
+  g.moveTo(200, 156);
+  g.lineTo(214, 145);
+  g.lineTo(228, 156);
+  g.closePath();
+  g.fill();
+  g.fillStyle = '#ffe8c8';
+  for (const [sx, sy] of [
+    [-6, 4],
+    [5, 6],
+    [-1, 12],
+  ]) {
+    g.beginPath();
+    g.arc(214 + sx, 170 + sy, 1.8, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+
+  // クレーンゲーム: pink print with white keyline
+  const word = 'クレーンゲーム';
+  const size = fitFont(g, word, 1180, 172, 900);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.font = `900 ${size}px ${JP}`;
+  g.fillStyle = 'rgba(20,50,120,0.35)';
+  g.fillText(word, 1040, 142);
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 22;
+  g.strokeText(word, 1035, 132);
+  g.fillStyle = '#ff8fbd';
+  g.fillText(word, 1035, 132);
+  g.strokeStyle = 'rgba(255,255,255,0.55)';
+  g.lineWidth = 4;
+  g.strokeText(word, 1032, 128);
+
+  // warning sticker, right
+  g.save();
+  g.translate(1830, 122);
+  g.rotate(0.045);
+  g.shadowColor = 'rgba(10,25,70,0.35)';
+  g.shadowBlur = 12;
+  g.shadowOffsetY = 6;
+  g.fillStyle = '#ffd21e';
+  roundRect(g, -152, -66, 304, 132, 10);
+  g.fill();
+  g.shadowColor = 'transparent';
+  g.strokeStyle = '#17141a';
+  g.lineWidth = 8;
+  roundRect(g, -148, -62, 296, 124, 8);
+  g.stroke();
+  g.fillStyle = '#17141a';
+  g.textAlign = 'left';
+  g.font = `900 46px ${ROUND}`;
+  g.fillText('WARNING', -124, -14);
+  g.font = `700 17px ${JP}`;
+  g.fillText('注意 / 動く部品に手を近づけないでください', -124, 18);
+  g.fillRect(-124, 30, 244, 2);
+  g.font = `700 14px ${ROUND}`;
+  g.fillText('KEEP HANDS CLEAR WHILE MACHINE IS RUNNING', -124, 49);
+  // little hazard triangle
+  g.beginPath();
+  g.moveTo(112, -50);
+  g.lineTo(136, -10);
+  g.lineTo(88, -10);
+  g.closePath();
+  g.fill();
+  g.fillStyle = '#ffd21e';
+  g.font = `900 26px ${ROUND}`;
+  g.textAlign = 'center';
+  g.fillText('!', 112, -17);
+  g.restore();
+
+  drawSparkle(g, 620, 42, 12, 'rgba(255,255,255,0.65)');
+  drawSparkle(g, 1520, 206, 10, 'rgba(255,255,255,0.5)');
+
+  return texture(c);
+}
+
+export function bodyTexture() {
+  const c = canvas(1024, 520);
+  const g = c.getContext('2d')!;
+
+  // porcelain panel with a faint warm blush at the bottom
+  const bg = g.createLinearGradient(0, 0, 0, 520);
+  bg.addColorStop(0, '#fffdfc');
+  bg.addColorStop(0.65, '#fff7fa');
+  bg.addColorStop(1, '#ffeef5');
+  g.fillStyle = bg;
+  roundRect(g, 4, 4, 1016, 512, 26);
+  g.fill();
+  g.strokeStyle = 'rgba(221,123,166,0.55)';
+  g.lineWidth = 5;
+  roundRect(g, 8, 8, 1008, 504, 22);
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,0.9)';
+  g.lineWidth = 2;
+  roundRect(g, 16, 16, 992, 488, 18);
+  g.stroke();
+
+  // big round UFO badge, top-left
+  g.save();
+  g.translate(96, 96);
+  g.shadowColor = 'rgba(90,20,55,0.2)';
+  g.shadowBlur = 10;
+  g.shadowOffsetY = 5;
+  g.fillStyle = '#ffe6a8';
+  g.beginPath();
+  g.arc(0, 0, 62, 0, Math.PI * 2);
+  g.fill();
+  g.shadowColor = 'transparent';
+  const wedges = ['#ffd9e8', '#bfe4ff', '#fff3c4', '#e6d6ff'];
+  wedges.forEach((col, i) => {
+    g.fillStyle = col;
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.arc(0, 0, 56, (i / 4) * Math.PI * 2, ((i + 1) / 4) * Math.PI * 2);
+    g.closePath();
+    g.fill();
+  });
+  g.fillStyle = '#fffdfc';
+  g.beginPath();
+  g.arc(0, 0, 42, 0, Math.PI * 2);
+  g.fill();
+  drawUfo(g, 0, 2, 0.48, false);
+  g.strokeStyle = '#dd7ba6';
+  g.lineWidth = 5;
+  g.beginPath();
+  g.arc(0, 0, 60, 0, Math.PI * 2);
+  g.stroke();
+  g.restore();
+
+  // pink logotype, two lines
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  const lines = ['クレーンゲーム', 'ポートフォリオ'];
+  lines.forEach((word, i) => {
+    const size = fitFont(g, word, 610, 86, 900);
+    g.font = `900 ${size}px ${JP}`;
+    const y = 148 + i * 110;
+    g.fillStyle = 'rgba(90,169,230,0.45)';
+    g.fillText(word, 494, y + 7);
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 13;
+    g.strokeText(word, 490, y);
+    g.fillStyle = '#e2558f';
+    g.fillText(word, 490, y);
+    g.strokeStyle = 'rgba(255,255,255,0.5)';
+    g.lineWidth = 3;
+    g.strokeText(word, 488, y - 2);
+  });
+
+  drawStar(g, 640, 300, 18, '#b28cff');
+
+  // right: cat mascot + blue badge
+  drawCat(g, 852, 168, 1.02);
+
+  g.save();
+  g.translate(770, 372);
+  g.fillStyle = '#5aa9e6';
+  g.beginPath();
+  g.arc(0, 0, 46, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#ffffff';
+  g.lineWidth = 6;
+  g.beginPath();
+  g.arc(0, 0, 42, 0, Math.PI * 2);
+  g.stroke();
+  drawUfo(g, 0, 0, 0.34, false);
+  g.restore();
+
+  // red/white warning, bottom-right
+  g.save();
+  g.translate(930, 414);
+  g.rotate(0.07);
+  g.shadowColor = 'rgba(60,10,20,0.22)';
+  g.shadowBlur = 10;
+  g.shadowOffsetY = 4;
+  g.fillStyle = '#fffdfc';
+  roundRect(g, -78, -48, 156, 96, 8);
+  g.fill();
+  g.shadowColor = 'transparent';
+  g.strokeStyle = '#e8262b';
+  g.lineWidth = 7;
+  roundRect(g, -74, -44, 148, 88, 6);
+  g.stroke();
+  g.fillStyle = '#e8262b';
+  g.font = `900 28px ${ROUND}`;
+  g.textAlign = 'center';
+  g.fillText('WARNING', 0, -5);
+  g.fillStyle = '#3a2028';
+  g.font = `700 12px ${ROUND}`;
+  g.fillText('DO NOT TILT OR SHAKE', 0, 20);
+  g.fillText('PRIZE 保證對象外', 0, 36);
+  g.restore();
+
+  // small print
+  g.fillStyle = 'rgba(80,60,70,0.5)';
+  g.font = `700 15px ${ROUND}`;
+  g.textAlign = 'left';
+  g.fillText('MADE IN JAPAN', 380, 492);
+  g.textAlign = 'right';
+  g.fillText('UFO-1024 / 220V', 990, 492);
+
+  // decorative dots
+  g.fillStyle = 'rgba(242,167,195,0.55)';
+  for (let i = 0; i < 6; i++) {
+    g.beginPath();
+    g.arc(690 + i * 16, 86, 3.4, 0, Math.PI * 2);
+    g.fill();
+  }
+
+  return texture(c);
+}
+
+export function deckTexture() {
+  const c = canvas(1024, 341);
+  const g = c.getContext('2d')!;
+
+  const bg = g.createLinearGradient(0, 0, 0, 341);
+  bg.addColorStop(0, '#5aa9e6');
+  bg.addColorStop(0.5, '#3f8fe0');
+  bg.addColorStop(1, '#2f78c6');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 1024, 341);
+
+  // sheen
+  const sheen = g.createRadialGradient(380, 80, 20, 380, 80, 520);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.22)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = sheen;
+  g.fillRect(0, 0, 1024, 341);
+
+  // inset line
+  g.strokeStyle = 'rgba(255,255,255,0.55)';
+  g.lineWidth = 4;
+  roundRect(g, 12, 12, 1000, 317, 20);
+  g.stroke();
+  g.strokeStyle = 'rgba(20,60,110,0.28)';
+  g.lineWidth = 2;
+  roundRect(g, 22, 22, 980, 297, 16);
+  g.stroke();
+
+  const arrow = (x: number, y: number, dir: 'left' | 'right' | 'up' | 'down') => {
+    g.save();
+    g.translate(x, y);
+    if (dir === 'left') g.rotate(Math.PI / 2);
+    if (dir === 'right') g.rotate(-Math.PI / 2);
+    if (dir === 'up') g.rotate(0);
+    if (dir === 'down') g.rotate(Math.PI);
+    // pointing up in local space
+    g.shadowColor = 'rgba(10,40,90,0.35)';
+    g.shadowBlur = 6;
+    g.shadowOffsetY = 4;
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.moveTo(0, -34);
+    g.lineTo(26, -8);
+    g.lineTo(10, -8);
+    g.lineTo(10, 28);
+    g.lineTo(-10, 28);
+    g.lineTo(-10, -8);
+    g.lineTo(-26, -8);
+    g.closePath();
+    g.fill();
+    g.restore();
+  };
+
+  // arrows around the joystick (joystick sits at 192, 191 on this print)
+  arrow(78, 191, 'left');
+  arrow(306, 191, 'right');
+  arrow(192, 278, 'down');
+  arrow(192, 104, 'up');
+
+  // tiny machine name on the rear edge
+  g.fillStyle = 'rgba(255,255,255,0.4)';
+  g.font = `800 26px ${JP}`;
+  g.textAlign = 'center';
+  g.fillText('クレーンゲーム', 530, 52);
+
+  // PLAY / スタート under the button
+  g.fillStyle = 'rgba(20,50,110,0.35)';
+  g.font = `900 40px ${ROUND}`;
+  g.textAlign = 'center';
+  g.fillText('PLAY / スタート', 756, 302);
+  g.fillStyle = '#ffffff';
+  g.fillText('PLAY / スタート', 753, 297);
+
+  // smiley sticker near the left corner
+  g.save();
+  g.translate(58, 52);
+  g.rotate(-0.12);
+  drawSmileyDeck(g, 0, 0, 28);
+  g.restore();
+
+  // yellow warning on the right rear
+  g.save();
+  g.translate(940, 54);
+  g.rotate(0.08);
+  g.fillStyle = '#ffd21e';
+  roundRect(g, -76, -30, 152, 60, 7);
+  g.fill();
+  g.strokeStyle = '#17141a';
+  g.lineWidth = 5;
+  roundRect(g, -73, -27, 146, 54, 5);
+  g.stroke();
+  g.fillStyle = '#17141a';
+  g.font = `900 22px ${ROUND}`;
+  g.fillText('WARNING', 0, -1);
+  g.font = `700 10px ${JP}`;
+  g.fillText('あぶない / CAUTION', 0, 16);
+  g.restore();
+
+  drawSparkle(g, 430, 60, 10, 'rgba(255,255,255,0.5)');
+  drawSparkle(g, 900, 280, 8, 'rgba(255,255,255,0.4)');
+
+  return texture(c);
+}
+
+function drawSmileyDeck(g: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  g.fillStyle = '#ffd21e';
+  g.beginPath();
+  g.arc(x, y, r, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = '#17141a';
+  g.lineWidth = 3.4;
+  g.stroke();
+  g.fillStyle = '#17141a';
+  for (const sx of [-1, 1]) {
+    g.beginPath();
+    g.ellipse(x + sx * r * 0.33, y - r * 0.18, r * 0.1, r * 0.14, 0, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.strokeStyle = '#17141a';
+  g.lineWidth = 3.6;
+  g.lineCap = 'round';
+  g.beginPath();
+  g.arc(x, y + r * 0.02, r * 0.44, 0.18 * Math.PI, 0.82 * Math.PI);
+  g.stroke();
+}
+
+function sideDecalTexture() {
+  const c = canvas(160, 420);
+  const g = c.getContext('2d')!;
+  const chars = 'ポートフォリオ';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.font = `900 34px ${JP}`;
+  for (let i = 0; i < chars.length; i++) {
+    const y = 52 + i * 48;
+    g.strokeStyle = 'rgba(255,255,255,0.95)';
+    g.lineWidth = 8;
+    g.strokeText(chars[i], 80, y);
+    g.fillStyle = '#d94f8b';
+    g.fillText(chars[i], 80, y);
+  }
+  g.fillStyle = '#ffffff';
+  for (const y of [18, 398]) {
+    g.beginPath();
+    g.arc(80, y, 4.5, 0, Math.PI * 2);
+    g.fill();
+  }
+  drawSparkle(g, 80, 30, 10, 'rgba(255,255,255,0.85)');
+  drawSparkle(g, 80, 388, 10, 'rgba(255,255,255,0.85)');
+  return texture(c);
+}
+
+function chamberBackTexture() {
+  const c = canvas(512, 512);
+  const g = c.getContext('2d')!;
+  const bg = g.createLinearGradient(0, 0, 0, 512);
+  bg.addColorStop(0, '#dff5ff');
+  bg.addColorStop(0.45, '#a6dbf8');
+  bg.addColorStop(1, '#6fb9ea');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 512, 512);
+
+  // soft wide light band, like the inside of a real lightbox
+  const band = g.createLinearGradient(0, 0, 512, 0);
+  band.addColorStop(0, 'rgba(255,255,255,0)');
+  band.addColorStop(0.5, 'rgba(255,255,255,0.55)');
+  band.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = band;
+  g.fillRect(0, 0, 512, 512);
+
+  // clouds
+  g.fillStyle = 'rgba(255,255,255,0.55)';
+  for (const [x, y, s] of [
+    [90, 380, 1],
+    [420, 330, 0.8],
+    [260, 440, 1.2],
+  ]) {
+    for (const [dx, dy, r] of [
+      [-38, 6, 26],
+      [-8, -8, 34],
+      [26, 2, 28],
+      [50, 10, 20],
+    ]) {
+      g.beginPath();
+      g.ellipse(x + dx * s, y + dy * s, r * s, (r * 0.62) * s, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+
+  // faint brand watermark low on the wall
+  g.fillStyle = 'rgba(255,255,255,0.52)';
+  g.textAlign = 'center';
+  g.font = `900 42px ${ROUND}`;
+  g.fillText('UFO PORTFOLIO', 256, 486);
+  g.font = `700 18px ${JP}`;
+  g.fillText('たのしい クレーンゲーム', 256, 512 - 10);
+
+  return texture(c);
 }
 
 function innerShadowTexture() {
-  const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 128;
+  const c = canvas(256, 256);
   const g = c.getContext('2d')!;
-  const lg = g.createLinearGradient(0, 0, 0, 128);
-  lg.addColorStop(0, 'rgba(0,0,0,0.92)');
-  lg.addColorStop(0.42, 'rgba(0,0,0,0.6)');
-  lg.addColorStop(0.8, 'rgba(0,0,0,0.28)');
-  lg.addColorStop(1, 'rgba(0,0,0,0.12)');
+  const lg = g.createLinearGradient(0, 0, 0, 256);
+  lg.addColorStop(0, 'rgba(8,4,6,0.92)');
+  lg.addColorStop(0.35, 'rgba(8,4,6,0.55)');
+  lg.addColorStop(0.72, 'rgba(8,4,6,0.22)');
+  lg.addColorStop(1, 'rgba(8,4,6,0.65)');
   g.fillStyle = lg;
-  g.fillRect(0, 0, 128, 128);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  g.fillRect(0, 0, 256, 256);
+  const rg = g.createRadialGradient(70, 60, 8, 70, 60, 160);
+  rg.addColorStop(0, 'rgba(255,220,190,0.22)');
+  rg.addColorStop(1, 'rgba(255,220,190,0)');
+  g.fillStyle = rg;
+  g.fillRect(0, 0, 256, 256);
+  return texture(c);
 }
 
-/** soft gradient used as fake contact shadow / grime along joints */
-function fadeTexture(dark = 0.55) {
-  const c = document.createElement('canvas');
-  c.width = 32;
-  c.height = 128;
+function streakTexture() {
+  const c = canvas(256, 32);
   const g = c.getContext('2d')!;
-  const lg = g.createLinearGradient(0, 0, 0, 128);
-  lg.addColorStop(0, `rgba(0,0,0,${dark})`);
-  lg.addColorStop(0.3, `rgba(0,0,0,${dark * 0.45})`);
-  lg.addColorStop(1, 'rgba(0,0,0,0)');
+  const lg = g.createLinearGradient(0, 0, 256, 0);
+  lg.addColorStop(0, 'rgba(255,255,255,0)');
+  lg.addColorStop(0.36, 'rgba(255,255,255,0.85)');
+  lg.addColorStop(0.58, 'rgba(255,255,255,0.5)');
+  lg.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = lg;
-  g.fillRect(0, 0, 32, 128);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  g.fillRect(0, 0, 256, 32);
+  return texture(c);
 }
 
 /* ------------------------------------------------------------------ */
-/* geometry helpers                                                    */
-/* ------------------------------------------------------------------ */
-
-type Face = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
-
-type ScrewSpec = { x: number; y: number; z: number; face: Face; s?: number };
-
-function faceEuler(face: Face) {
-  switch (face) {
-    case 'back':
-      return new THREE.Euler(0, Math.PI, 0);
-    case 'left':
-      return new THREE.Euler(0, -Math.PI / 2, 0);
-    case 'right':
-      return new THREE.Euler(0, Math.PI / 2, 0);
-    case 'top':
-      return new THREE.Euler(-Math.PI / 2, 0, 0);
-    case 'bottom':
-      return new THREE.Euler(Math.PI / 2, 0, 0);
-    default:
-      return new THREE.Euler(0, 0, 0);
-  }
-}
-
-function buildScrews(parent: THREE.Object3D, specs: ScrewSpec[]) {
-  if (!specs.length) return;
-  const geo = new THREE.CylinderGeometry(0.0067, 0.0073, 0.0026, 12);
-  geo.rotateX(Math.PI / 2);
-  const mat = new THREE.MeshPhysicalMaterial({
-    map: torxTexture(),
-    metalness: 0.95,
-    roughness: 0.4,
-    envMapIntensity: 1.35,
-  });
-  const inst = new THREE.InstancedMesh(geo, mat, specs.length);
-  const m = new THREE.Matrix4();
-  const p = new THREE.Vector3();
-  const q = new THREE.Quaternion();
-  const sc = new THREE.Vector3();
-  specs.forEach((sp, i) => {
-    q.setFromEuler(faceEuler(sp.face));
-    const k = sp.s ?? 1;
-    sc.set(k, k, k);
-    m.compose(p.set(sp.x, sp.y, sp.z), q, sc);
-    inst.setMatrixAt(i, m);
-  });
-  inst.instanceMatrix.needsUpdate = true;
-  parent.add(inst);
-
-  // a thin stainless washer under every head: reads as a real fastener
-  const wgeo = new THREE.CylinderGeometry(0.0102, 0.0104, 0.0011, 16);
-  wgeo.rotateX(Math.PI / 2);
-  const wmat = brushedMetal();
-  const washers = new THREE.InstancedMesh(wgeo, wmat, specs.length);
-  specs.forEach((sp, i) => {
-    q.setFromEuler(faceEuler(sp.face));
-    const k = (sp.s ?? 1) * 0.98;
-    sc.set(k, k, k);
-    m.compose(p.set(sp.x, sp.y, sp.z), q, sc);
-    washers.setMatrixAt(i, m);
-  });
-  washers.instanceMatrix.needsUpdate = true;
-  parent.add(washers);
-}
-
-type Batch = {
-  box: (w: number, h: number, d: number, x: number, y: number, z: number, ry?: number) => void;
-  cyl: (r: number, h: number, x: number, y: number, z: number, axis?: 'x' | 'y' | 'z', seg?: number) => void;
-  raw: (geo: THREE.BufferGeometry) => void;
-  finish: (mat: THREE.Material, parent: THREE.Object3D, castShadow?: boolean) => THREE.Mesh | null;
-};
-
-function makeBatch(): Batch {
-  const geos: THREE.BufferGeometry[] = [];
-  return {
-    box(w, h, d, x, y, z, ry = 0) {
-      const g = new THREE.BoxGeometry(w, h, d);
-      if (ry) g.rotateY(ry);
-      g.translate(x, y, z);
-      geos.push(g);
-    },
-    cyl(r, h, x, y, z, axis = 'y', seg = 10) {
-      const g = new THREE.CylinderGeometry(r, r, h, seg);
-      if (axis === 'x') g.rotateZ(Math.PI / 2);
-      else if (axis === 'z') g.rotateX(Math.PI / 2);
-      g.translate(x, y, z);
-      geos.push(g);
-    },
-    raw(g) {
-      geos.push(g);
-    },
-    finish(mat, parent, castShadow = true) {
-      if (!geos.length) return null;
-      const merged = mergeGeometries(geos, false);
-      geos.forEach((g) => g.dispose());
-      geos.length = 0;
-      if (!merged) return null;
-      const mesh = new THREE.Mesh(merged, mat);
-      mesh.castShadow = castShadow;
-      mesh.receiveShadow = true;
-      parent.add(mesh);
-      return mesh;
-    },
-  };
-}
-
-/* ------------------------------------------------------------------ */
-/* public glass material (kept for the cabinet API)                    */
+/* materials                                                           */
 /* ------------------------------------------------------------------ */
 
 export function glassMaterial() {
@@ -378,16 +915,62 @@ export function glassMaterial() {
     color: 0xffffff,
     metalness: 0,
     transmission: cheap ? 0 : 1,
-    opacity: cheap ? 0.1 : 1,
+    opacity: cheap ? 0.09 : 1,
     thickness: 0.012,
     ior: 1.46,
     roughness: cheap ? 0.015 : 0.03,
     transparent: true,
     side: THREE.DoubleSide,
-    envMapIntensity: cheap ? 2.8 : 1.2,
+    envMapIntensity: cheap ? 2.8 : 1.15,
     specularIntensity: 1,
     reflectivity: 1,
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* geometry helpers                                                    */
+/* ------------------------------------------------------------------ */
+
+const rbox = (w: number, h: number, d: number, r = 0.01) =>
+  new RoundedBoxGeometry(w, h, d, 3, Math.max(0.0015, Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001)));
+
+function add(
+  parent: THREE.Object3D,
+  geo: THREE.BufferGeometry,
+  mat: THREE.Material,
+  x = 0,
+  y = 0,
+  z = 0,
+  cast = true
+) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = cast;
+  m.receiveShadow = true;
+  parent.add(m);
+  return m;
+}
+
+function label(
+  parent: THREE.Object3D,
+  atlas: THREE.Texture,
+  rects: Record<string, UvRect>,
+  name: string,
+  w: number,
+  h: number,
+  x: number,
+  y: number,
+  z: number,
+  rotY = 0,
+  rotZ = 0
+) {
+  const rect = rects[name];
+  if (!rect) return null;
+  const m = decalMesh(atlas, rect, w, h, { opacity: 0.98, gloss: true });
+  m.position.set(x, y, z);
+  m.rotation.set(0, rotY, rotZ);
+  parent.add(m);
+  return m;
 }
 
 /* ------------------------------------------------------------------ */
@@ -397,882 +980,479 @@ export function glassMaterial() {
 export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>) {
   const root = new THREE.Group();
 
-  /* ---------------- materials: not one uniform plastic ---------------- */
+  /* ---------------- mouldings ---------------- */
 
-  const shell = plastic('#f3ecdf', {
-    roughness: 0.35,
-    clearcoatRoughness: 0.2,
-    roughnessMap: microRoughness(),
-    envMapIntensity: 1.05,
-  });
-  const shellDeck = plastic('#f7f1e6', {
-    roughness: 0.23,
-    clearcoatRoughness: 0.07,
-    roughnessMap: microRoughness(),
-    envMapIntensity: 1.2,
-  });
-  const pinkFront = plastic(PALETTE.pink, {
-    roughness: 0.29,
-    clearcoatRoughness: 0.1,
-    roughnessMap: microRoughness(),
-  });
-  const pinkSide = plastic(PALETTE.pink, {
-    roughness: 0.38,
-    clearcoatRoughness: 0.24,
-    roughnessMap: microRoughness(),
-  });
-  const blueGloss = plastic(PALETTE.blue, {
-    roughness: 0.18,
-    clearcoatRoughness: 0.04,
-    roughnessMap: microRoughness(),
-  });
-  const blueSatin = plastic(PALETTE.blue, {
-    roughness: 0.42,
-    clearcoatRoughness: 0.32,
-    roughnessMap: microRoughness(),
-  });
-  const chamberPaint = plastic('#f2ebdc', {
-    roughness: 0.52,
-    clearcoatRoughness: 0.4,
-    roughnessMap: microRoughness(),
-  });
-  const dark = matte('#1d1b18');
-  const joint = matte('#17130f');
-  const jointSoft = matte('#2b2521');
-  const brush = brushedMetal();
+  const pink = candy(CAB.pink, { roughness: 0.2 });
+  const pinkDeep = candy(CAB.pinkDeep, { roughness: 0.24 });
+  const pinkInk = candy(CAB.pinkInk, { roughness: 0.26 });
+  const azure = candy(CAB.azure, { roughness: 0.16, clearcoatRoughness: 0.04 });
+  const azureMid = candy(CAB.azureMid, { roughness: 0.22 });
+  const azureDeep = candy(CAB.azureDeep, { roughness: 0.3 });
+  const azurePale = candy(CAB.azurePale, { roughness: 0.44, clearcoat: 0.5, clearcoatRoughness: 0.3 });
+  const porcelain = candy(CAB.white, { roughness: 0.3, clearcoatRoughness: 0.14 });
+  const canary = candy(CAB.yellow, { roughness: 0.28 });
+  const ink = matte(CAB.ink);
   const rub = rubber();
-  const smoke = smokedAcrylic();
-  const clear = clearAcrylic();
+  const chromeMat = chrome();
   const glass = glassMaterial();
 
-  /* ---------------- detail batches ---------------- */
-
-  const jointB = makeBatch();
-  const rubberB = makeBatch();
-  const brushB = makeBatch();
-  const chromeB = makeBatch();
-  const darkB = makeBatch();
-  const screwSpecs: ScrewSpec[] = [];
-  const screw = (x: number, y: number, z: number, face: Face, s = 1) =>
-    screwSpecs.push({ x, y, z, face, s });
-
-  /* ---------------- plinth / base / feet ---------------- */
-
-  const plinth = new THREE.Mesh(new RoundedBoxGeometry(1.02, 0.585, 0.78, 5, 0.042), shell);
-  plinth.position.y = 0.3275; // bottom 0.035 -> shadow gap + visible feet
-  plinth.castShadow = true;
-  plinth.receiveShadow = true;
-  root.add(plinth);
-
-  // recessed under-frame: keeps the belly dark without faking a solid plinth
-  const base = new THREE.Mesh(new RoundedBoxGeometry(0.88, 0.012, 0.64, 2, 0.006), dark);
-  base.position.y = 0.0295;
-  root.add(base);
+  /* ---------------- feet + lower body ---------------- */
 
   for (const [x, z] of [
-    [-0.45, 0.325],
-    [0.45, 0.325],
-    [-0.45, -0.325],
-    [0.45, -0.325],
+    [-0.425, 0.3],
+    [0.425, 0.3],
+    [-0.425, -0.3],
+    [0.425, -0.3],
   ]) {
-    const pad = new THREE.CylinderGeometry(0.034, 0.04, 0.024, 20);
-    pad.translate(x, 0.012, z);
-    rubberB.raw(pad);
-    const ring = new THREE.TorusGeometry(0.036, 0.0048, 6, 20);
-    ring.rotateX(Math.PI / 2);
-    ring.translate(x, 0.019, z);
-    rubberB.raw(ring);
-    // visible levelling foot: brushed collar + a sliver of thread
-    brushB.cyl(0.027, 0.016, x, 0.033, z, 'y', 16);
-    brushB.cyl(0.019, 0.006, x, 0.026, z, 'y', 12);
+    add(root, new THREE.CylinderGeometry(0.045, 0.052, 0.05, 22), rub, x, 0.025, z);
+    add(root, new THREE.TorusGeometry(0.047, 0.005, 6, 22), chromeMat, x, 0.048, z).rotation.x = Math.PI / 2;
   }
 
-  /* ---------------- lower front panel ---------------- */
+  const plinth = add(root, rbox(1.02, 0.555, 0.78, 0.05), pink, 0, 0.3225, 0);
+  plinth.receiveShadow = true;
 
-  const panel = new THREE.Mesh(new RoundedBoxGeometry(0.9, 0.46, 0.012, 2, 0.004), pinkFront);
-  panel.position.set(0, 0.37, 0.387);
-  panel.receiveShadow = true;
-  root.add(panel);
+  // deep-pink base rail + a white pinstripe
+  add(root, rbox(1.04, 0.062, 0.795, 0.022), pinkDeep, 0, 0.076, 0);
+  add(root, rbox(1.042, 0.012, 0.797, 0.005), porcelain, 0, 0.112, 0, false);
 
-  // panel-in-shell reveal: 2 mm dark joints around the pink laminate
-  jointB.box(0.906, 0.004, 0.005, 0, 0.1425, 0.3935);
-  jointB.box(0.004, 0.256, 0.005, -0.4505, 0.2715, 0.3935);
-  jointB.box(0.004, 0.256, 0.005, 0.4505, 0.2715, 0.3935);
-  // shadow line under the protruding console
-  jointB.box(0.93, 0.0045, 0.006, 0, 0.3985, 0.3938);
-
-  // screws in the laminate corners
-  screw(-0.437, 0.383, 0.3945, 'front', 0.9);
-  screw(0.437, 0.383, 0.3945, 'front', 0.9);
-  screw(-0.437, 0.158, 0.3945, 'front', 0.9);
-  screw(0.437, 0.158, 0.3945, 'front', 0.9);
-
-  // soft contact shadows: the console overhangs, so the laminate darkens under it
-  const fade = fadeTexture(0.62);
-  const softShadow = (w: number, h: number, x: number, y: number, z: number, opacity: number, flip = 0) => {
-    const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(w, h),
-      new THREE.MeshBasicMaterial({
-        map: fade,
-        color: '#000000',
-        transparent: true,
-        opacity,
-        depthWrite: false,
-      })
-    );
-    m.position.set(x, y, z);
-    m.rotation.z = flip;
-    m.renderOrder = 1;
-    root.add(m);
-    return m;
-  };
-  softShadow(0.94, 0.075, 0, 0.3625, 0.3942, 0.62);
-  softShadow(0.9, 0.05, 0, 0.171, 0.3943, 0.42, Math.PI);
-
-  /* ---------------- prize door ---------------- */
-
-  const doorX = -0.27;
-  const doorY = 0.315;
-  const doorOut = 0.3;
-  const doorH = 0.17;
-  const barS = 0.038;
-  const barH = 0.026;
-  const innerSpan = doorOut - barS * 2;
-  const apW = innerSpan - 0.004;
-  const apH = doorH - barH * 2 - 0.004;
-  const apTop = doorY + apH / 2;
-  const apBottom = doorY - apH / 2;
-
-  const cavityMat = new THREE.MeshStandardMaterial({
-    color: '#1b1510',
-    roughness: 0.82,
-    metalness: 0,
-    side: THREE.DoubleSide,
-  });
-
-  // real recess: back panel + floor + ceiling + side cheeks, 15 mm behind the flap
-  const cavity = new THREE.Mesh(
-    new THREE.PlaneGeometry(doorOut - 0.02, doorH - 0.02),
-    new THREE.MeshBasicMaterial({ color: '#080706' })
+  // white belly panel
+  add(root, rbox(0.9, 0.44, 0.02, 0.024), porcelain, 0, 0.375, 0.388);
+  const bodyTex = bodyTexture();
+  add(
+    root,
+    new THREE.PlaneGeometry(0.892, 0.432),
+    printed(bodyTex, { transparent: true, depthWrite: true, roughness: 0.36, clearcoat: 0.5 }),
+    0,
+    0.375,
+    0.3995,
+    false
   );
-  cavity.position.set(doorX, doorY, 0.3938);
-  root.add(cavity);
 
-  const shadow = new THREE.Mesh(
-    new THREE.PlaneGeometry(doorOut - 0.02, doorH - 0.02),
-    new THREE.MeshBasicMaterial({
-      map: innerShadowTexture(),
-      transparent: true,
-      depthWrite: false,
-    })
+  // thin pink reveal around the belly panel
+  add(root, rbox(0.916, 0.012, 0.012, 0.005), pinkDeep, 0, 0.598, 0.395, false);
+  add(root, rbox(0.916, 0.012, 0.012, 0.005), pinkDeep, 0, 0.152, 0.395, false);
+  add(root, rbox(0.012, 0.452, 0.012, 0.005), pinkDeep, -0.457, 0.375, 0.395, false);
+  add(root, rbox(0.012, 0.452, 0.012, 0.005), pinkDeep, 0.457, 0.375, 0.395, false);
+
+  /* ---------------- prize door (bottom-left) ---------------- */
+
+  const doorX = -0.265;
+  const doorY = 0.263;
+  const doorW = 0.27;
+  const doorH = 0.152;
+
+  // recessed throat
+  add(root, new THREE.PlaneGeometry(doorW - 0.035, doorH - 0.035), new THREE.MeshBasicMaterial({ color: '#160d14' }), doorX, doorY, 0.4015, false);
+  add(
+    root,
+    new THREE.PlaneGeometry(doorW - 0.035, doorH - 0.035),
+    new THREE.MeshBasicMaterial({ map: innerShadowTexture(), transparent: true, depthWrite: false, opacity: 0.95 }),
+    doorX,
+    doorY,
+    0.4025,
+    false
   );
-  shadow.position.set(doorX, doorY, 0.3941);
-  root.add(shadow);
 
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(apW, 0.0165), cavityMat);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(doorX, apBottom + 0.001, 0.4007);
-  root.add(floor);
-  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(apW, 0.0165), cavityMat);
-  ceiling.rotation.x = Math.PI / 2;
-  ceiling.position.set(doorX, apTop - 0.001, 0.4007);
-  root.add(ceiling);
-  for (const s of [-1, 1]) {
-    const cheek = new THREE.Mesh(new THREE.PlaneGeometry(0.0165, apH), cavityMat);
-    cheek.rotation.y = s * (Math.PI / 2);
-    cheek.position.set(doorX + s * (apW / 2 - 0.001), doorY, 0.4007);
-    root.add(cheek);
-  }
-
-  const innerWarm = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.16, 0.06),
-    new THREE.MeshBasicMaterial({
-      color: '#ffc98f',
+  // smoked flap, top-hinged a hair open
+  const flap = add(
+    root,
+    new THREE.PlaneGeometry(doorW - 0.055, doorH - 0.06),
+    new THREE.MeshPhysicalMaterial({
+      color: '#2c2130',
+      roughness: 0.05,
+      metalness: 0,
       transparent: true,
       opacity: 0.4,
-      blending: THREE.AdditiveBlending,
+      clearcoat: 1,
+      clearcoatRoughness: 0.03,
+      side: THREE.DoubleSide,
+      envMapIntensity: 1.4,
       depthWrite: false,
-    })
+    }),
+    doorX,
+    doorY - 0.004,
+    0.4075,
+    false
   );
-  innerWarm.position.set(doorX, doorY - 0.033, 0.3955);
-  root.add(innerWarm);
+  flap.rotation.x = -0.05;
 
-  // warm strip light in the throat of the chute
-  const chuteLED = new THREE.Mesh(
-    new THREE.BoxGeometry(0.17, 0.004, 0.004),
-    glow('#ffc78a', 1.3)
-  );
-  chuteLED.position.set(doorX, apBottom + 0.007, 0.3975);
-  root.add(chuteLED);
+  // chunky pink frame
+  const bar = 0.024;
+  add(root, rbox(bar, doorH + bar, 0.02, 0.008), pinkDeep, doorX - doorW / 2, doorY, 0.408);
+  add(root, rbox(bar, doorH + bar, 0.02, 0.008), pinkDeep, doorX + doorW / 2, doorY, 0.408);
+  add(root, rbox(doorW + bar, bar, 0.02, 0.008), pinkDeep, doorX, doorY + doorH / 2, 0.408);
+  add(root, rbox(doorW + bar, bar, 0.02, 0.008), pinkDeep, doorX, doorY - doorH / 2, 0.408);
 
-  // blue outer bezel, mitred bars
-  const barMat = blueGloss;
-  const leftBar = new THREE.Mesh(new RoundedBoxGeometry(barS, doorH, 0.016, 2, 0.004), barMat);
-  leftBar.position.set(doorX - (doorOut / 2 - barS / 2), doorY, 0.4005);
-  root.add(leftBar);
-  const rightBar = leftBar.clone();
-  rightBar.position.x = doorX + (doorOut / 2 - barS / 2);
-  root.add(rightBar);
-  const topBar = new THREE.Mesh(new RoundedBoxGeometry(innerSpan, barH, 0.016, 2, 0.004), barMat);
-  topBar.position.set(doorX, doorY + (doorH / 2 - barH / 2), 0.4005);
-  root.add(topBar);
-  const bottomBar = topBar.clone();
-  bottomBar.position.y = doorY - (doorH / 2 - barH / 2);
-  root.add(bottomBar);
-  for (const m of [leftBar, rightBar, topBar, bottomBar]) {
-    m.castShadow = true;
-    m.receiveShadow = true;
+  // chrome pull + hinge pins
+  add(root, new THREE.CylinderGeometry(0.004, 0.004, doorW - 0.06, 10), chromeMat, doorX, doorY - doorH / 2 + 0.028, 0.418, false).rotation.z = Math.PI / 2;
+  for (const s of [-1, 1]) {
+    add(root, new THREE.CylinderGeometry(0.0035, 0.0035, 0.012, 8), chromeMat, doorX + s * 0.07, doorY + doorH / 2 + 0.006, 0.413, false).rotation.z = Math.PI / 2;
   }
 
-  // dark reveal around the bezel against the laminate
-  jointB.box(0.004, doorH + 0.006, 0.006, doorX - doorOut / 2, doorY, 0.3975);
-  jointB.box(0.004, doorH + 0.006, 0.006, doorX + doorOut / 2, doorY, 0.3975);
-  jointB.box(doorOut + 0.006, 0.004, 0.006, doorX, doorY + doorH / 2, 0.3975);
-  jointB.box(doorOut + 0.006, 0.004, 0.006, doorX, doorY - doorH / 2, 0.3975);
-
-  // brushed inner bezel around the aperture
-  brushB.box(0.007, apH, 0.006, doorX - apW / 2, doorY, 0.408);
-  brushB.box(0.007, apH, 0.006, doorX + apW / 2, doorY, 0.408);
-  brushB.box(apW, 0.007, 0.006, doorX, doorY + apH / 2, 0.408);
-  brushB.box(apW, 0.007, 0.006, doorX, doorY - apH / 2, 0.408);
-
-  // smoked flap, top-hinged, with a polished acrylic edge
-  const flapGroup = new THREE.Group();
-  flapGroup.position.set(doorX, doorY - 0.002, 0.4105);
-  flapGroup.rotation.x = -0.06;
-  root.add(flapGroup);
-
-  const flapW = apW - 0.008;
-  const flapH = apH - 0.006;
-  const flap = new THREE.Mesh(new RoundedBoxGeometry(flapW, flapH, 0.003, 2, 0.002), smoke);
-  flap.renderOrder = 2;
-  flapGroup.add(flap);
-
-  const polishedEdge = plastic('#dfe7f0', { roughness: 0.08, clearcoatRoughness: 0.03 });
-  for (const y of [-flapH / 2 + 0.0018, flapH / 2 - 0.0018]) {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(flapW - 0.003, 0.0036, 0.0042), polishedEdge);
-    bar.position.set(0, y, 0.0008);
-    flapGroup.add(bar);
-  }
-  for (const x of [-flapW / 2 + 0.0018, flapW / 2 - 0.0018]) {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.0036, flapH - 0.003, 0.0042), polishedEdge);
-    bar.position.set(x, 0, 0.0008);
-    flapGroup.add(bar);
-  }
-
-  // specular band on the acrylic
-  const flapStreak = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.18, 0.03),
+  // shadow cast into the throat
+  const doorGlow = add(
+    root,
+    new THREE.PlaneGeometry(doorW - 0.06, 0.03),
     new THREE.MeshBasicMaterial({
-      map: streakTexture(),
+      color: '#ffc78a',
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.35,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
-    })
+    }),
+    doorX,
+    doorY - doorH / 2 + 0.024,
+    0.406,
+    false
   );
-  flapStreak.position.set(doorX - 0.01, doorY + 0.026, 0.4142);
-  flapStreak.rotation.z = 0.24;
-  flapStreak.renderOrder = 3;
-  root.add(flapStreak);
+  doorGlow.renderOrder = 1;
 
-  // hinge rod + knuckle plates
-  chromeB.cyl(0.0038, apW + 0.004, doorX, apTop + 0.007, 0.4115, 'x', 10);
-  for (const s of [-1, 1]) {
-    brushB.box(0.028, 0.013, 0.008, doorX + s * 0.07, apTop + 0.007, 0.4108);
-  }
+  /* ---------------- riser + console ---------------- */
 
-  // pull handle standing off the flap
-  chromeB.cyl(0.0042, 0.13, doorX, apBottom + 0.018, 0.418, 'x', 10);
-  for (const s of [-1, 1]) {
-    chromeB.cyl(0.0032, 0.009, doorX + s * 0.055, apBottom + 0.018, 0.4145, 'z', 8);
-  }
-
-  // chrome sill at the mouth of the chute
-  chromeB.cyl(0.0038, apW - 0.01, doorX, apBottom + 0.002, 0.4085, 'x', 10);
-  brushB.box(0.03, 0.012, 0.006, doorX, apBottom - 0.008, 0.4085);
-
-  // prize aperture screws
-  for (const sx of [-1, 1]) {
-    for (const sy of [-1, 1]) {
-      screw(
-        doorX + sx * (doorOut / 2 - 0.017),
-        doorY + sy * (doorH / 2 - 0.014),
-        0.4093,
-        'front',
-        0.85
-      );
-    }
-  }
-
-  /* ---------------- riser between console and glass ---------------- */
-
-  const riser = new THREE.Mesh(new RoundedBoxGeometry(0.995, 0.116, 0.02, 2, 0.006), shell);
-  riser.position.set(0, 0.657, 0.383);
-  riser.receiveShadow = true;
-  riser.castShadow = true;
-  root.add(riser);
-
-  jointB.box(0.99, 0.0045, 0.005, 0, 0.6005, 0.3938);
-  jointB.box(0.99, 0.0045, 0.005, 0, 0.714, 0.3938);
-  jointB.box(0.004, 0.116, 0.005, -0.4925, 0.657, 0.3938);
-  jointB.box(0.004, 0.116, 0.005, 0.4925, 0.657, 0.3938);
-  softShadow(0.94, 0.055, 0, 0.692, 0.3942, 0.5);
-
-  // service lock on the riser
-  brushB.box(0.062, 0.03, 0.005, 0.36, 0.66, 0.3945);
-  chromeB.cyl(0.0115, 0.009, 0.36, 0.66, 0.3975, 'z', 16);
-  jointB.box(0.0035, 0.013, 0.003, 0.36, 0.66, 0.4025);
-  screw(-0.455, 0.678, 0.3945, 'front', 0.8);
-  screw(0.455, 0.678, 0.3945, 'front', 0.8);
-
-  /* ---------------- console / deck ---------------- */
-
-  const consoleBody = new THREE.Mesh(new RoundedBoxGeometry(0.99, 0.2, 0.3, 3, 0.03), shell);
-  consoleBody.position.set(0, 0.5, 0.45);
-  consoleBody.castShadow = true;
-  root.add(consoleBody);
-
-  const consoleFace = new THREE.Mesh(new RoundedBoxGeometry(0.9, 0.16, 0.012, 2, 0.004), pinkFront);
-  consoleFace.position.set(0, 0.505, 0.597);
-  consoleFace.receiveShadow = true;
-  root.add(consoleFace);
-  jointB.box(0.906, 0.004, 0.005, 0, 0.588, 0.6035);
-  jointB.box(0.906, 0.004, 0.005, 0, 0.422, 0.6035);
-  jointB.box(0.004, 0.17, 0.005, -0.4505, 0.505, 0.6035);
-  jointB.box(0.004, 0.17, 0.005, 0.4505, 0.505, 0.6035);
-  screw(-0.405, 0.57, 0.6045, 'front', 0.8);
-  screw(0.405, 0.57, 0.6045, 'front', 0.8);
-  screw(-0.405, 0.44, 0.6045, 'front', 0.8);
-  screw(0.405, 0.44, 0.6045, 'front', 0.8);
+  // the deck is the front-most moulding: keep the riser behind it, otherwise
+  // it occludes the whole playfield print from the low game camera.
+  add(root, rbox(1.0, 0.145, 0.17, 0.03), pink, 0, 0.657, 0.322);
+  add(root, rbox(0.94, 0.022, 0.014, 0.008), pinkDeep, 0, 0.716, 0.402, false);
 
   const deck = new THREE.Group();
-  deck.position.set(0, 0.585, 0.47);
-  deck.rotation.x = -0.14;
+  deck.position.set(0, 0.585, 0.45);
+  deck.rotation.x = 0.14;
   root.add(deck);
 
-  const deckPanel = new THREE.Mesh(new RoundedBoxGeometry(1.0, 0.08, 0.34, 3, 0.035), shellDeck);
-  deckPanel.castShadow = true;
-  deckPanel.receiveShadow = true;
-  deck.add(deckPanel);
+  add(deck, rbox(1.0, 0.074, 0.35, 0.03), azure, 0, 0, 0, true);
+  add(deck, rbox(1.035, 0.036, 0.375, 0.014), pinkDeep, 0, -0.042, 0, true);
+  add(deck, rbox(1.045, 0.012, 0.385, 0.005), pinkInk, 0, -0.064, 0, false);
 
-  const deckTrim = new THREE.Mesh(new RoundedBoxGeometry(1.02, 0.03, 0.36, 3, 0.014), blueSatin);
-  deckTrim.position.y = -0.04;
-  deck.add(deckTrim);
-
-  // anodised control plate under the hardware
-  const plate = new THREE.Mesh(new THREE.BoxGeometry(0.71, 0.004, 0.2), anodized());
-  plate.position.set(-0.015, 0.0415, 0.015);
-  plate.receiveShadow = true;
-  deck.add(plate);
-
-  const deckScrews: ScrewSpec[] = [];
-  for (const [x, z] of [
-    [-0.35, -0.085],
-    [0.32, -0.085],
-    [-0.35, 0.115],
-    [0.32, 0.115],
-  ]) {
-    deckScrews.push({ x, y: 0.0445, z, face: 'top', s: 0.85 });
-  }
-  for (const [x, z] of [
-    [-0.345, -0.045],
-    [-0.255, -0.045],
-    [-0.345, 0.105],
-    [-0.255, 0.105],
-  ]) {
-    deckScrews.push({ x, y: 0.0445, z, face: 'top', s: 0.7 });
-  }
-
-  // joystick
-  const joyBase = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.055, 0.02, 24), dark);
-  joyBase.position.set(-0.3, 0.05, 0.03);
-  deck.add(joyBase);
-  const boot = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.032, 0.026, 16), rub);
-  boot.position.set(-0.3, 0.068, 0.03);
-  deck.add(boot);
-  const joyRod = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.01, 0.075, 12), chrome());
-  joyRod.position.set(-0.3, 0.095, 0.03);
-  deck.add(joyRod);
-  const joyBall = new THREE.Mesh(
-    new THREE.SphereGeometry(0.026, 24, 16),
-    plastic(PALETTE.red, { roughness: 0.12 })
+  const deckPrint = add(
+    deck,
+    new THREE.PlaneGeometry(0.965, 0.325),
+    printed(deckTexture(), { roughness: 0.34, clearcoat: 0.8, clearcoatRoughness: 0.08 }),
+    0,
+    0.0385,
+    0,
+    false
   );
-  joyBall.position.set(-0.3, 0.135, 0.03);
-  joyBall.castShadow = true;
-  deck.add(joyBall);
-  const joyCollar = new THREE.Mesh(new THREE.TorusGeometry(0.026, 0.003, 6, 20), brush);
-  joyCollar.rotation.x = Math.PI / 2;
-  joyCollar.position.set(-0.3, 0.053, 0.03);
-  deck.add(joyCollar);
+  deckPrint.rotation.x = -Math.PI / 2;
 
-  // button
-  const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.06, 0.032, 32), glow(PALETTE.yellow, 0.35));
-  btn.position.set(0.22, 0.062, 0.02);
-  btn.castShadow = true;
-  deck.add(btn);
-  const btnRing = new THREE.Mesh(new THREE.TorusGeometry(0.064, 0.007, 10, 32), chrome());
-  btnRing.rotation.x = Math.PI / 2;
-  btnRing.position.set(0.22, 0.05, 0.02);
-  deck.add(btnRing);
-  const btnBase = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.07, 0.072, 0.014, 28),
-    plastic(PALETTE.yellow, { roughness: 0.35 })
+  // joystick: fixed base + articulated stick (rod + ball), pivot at the deck
+  const joyX = -0.3;
+  const joyZ = 0.02;
+  add(deck, rbox(0.13, 0.022, 0.13, 0.03), ink, joyX, 0.045, joyZ);
+  add(deck, new THREE.CylinderGeometry(0.056, 0.06, 0.02, 26), ink, joyX, 0.055, joyZ);
+  add(deck, new THREE.CylinderGeometry(0.032, 0.04, 0.03, 20), rub, joyX, 0.073, joyZ);
+  add(deck, new THREE.TorusGeometry(0.043, 0.0065, 8, 26), chromeMat, joyX, 0.069, joyZ).rotation.x = Math.PI / 2;
+  add(deck, new THREE.TorusGeometry(0.054, 0.0045, 8, 26), pinkInk, joyX, 0.061, joyZ).rotation.x = Math.PI / 2;
+
+  const stick = new THREE.Group();
+  stick.position.set(joyX, 0.072, joyZ);
+  stick.userData.noMerge = true; // si inclina con l'input
+  deck.add(stick);
+
+  const rodMat = new THREE.MeshPhysicalMaterial({
+    color: '#e3e8ee',
+    metalness: 1,
+    roughness: 0.14,
+    envMapIntensity: 1.8,
+    transparent: true,
+  });
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.0095, 0.082, 14), rodMat);
+  rod.position.y = 0.041;
+  rod.castShadow = true;
+  stick.add(rod);
+
+  const ballMat = candy(CAB.red, { roughness: 0.08, clearcoatRoughness: 0.03 });
+  ballMat.transparent = true;
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.029, 30, 20), ballMat);
+  ball.position.y = 0.1;
+  ball.castShadow = true;
+  stick.add(ball);
+
+  // button: black ring + yellow illuminated cap, cap group animates on press
+  const btnX = 0.235;
+  const btnZ = -0.01;
+  add(deck, new THREE.CylinderGeometry(0.082, 0.086, 0.02, 34), ink, btnX, 0.048, btnZ);
+  add(deck, new THREE.TorusGeometry(0.072, 0.007, 8, 34), chromeMat, btnX, 0.058, btnZ).rotation.x = Math.PI / 2;
+  add(deck, new THREE.TorusGeometry(0.066, 0.008, 8, 34), ink, btnX, 0.065, btnZ).rotation.x = Math.PI / 2;
+  const btnGlowRing = add(deck, new THREE.TorusGeometry(0.061, 0.0035, 6, 36), glow('#fff0a8', 1.6), btnX, 0.066, btnZ);
+  btnGlowRing.rotation.x = Math.PI / 2;
+
+  const capMat = new THREE.MeshPhysicalMaterial({
+    color: CAB.yellow,
+    emissive: new THREE.Color(CAB.yellow),
+    emissiveIntensity: 0.9,
+    roughness: 0.26,
+    clearcoat: 1,
+    clearcoatRoughness: 0.04,
+    transparent: true,
+  });
+  const capGroup = new THREE.Group();
+  capGroup.position.set(btnX, 0.07, btnZ);
+  capGroup.userData.noMerge = true; // la corsa del bottone è animata
+  deck.add(capGroup);
+  const capSide = new THREE.Mesh(new THREE.CylinderGeometry(0.056, 0.061, 0.028, 34), capMat);
+  capSide.position.y = 0.014;
+  capSide.castShadow = true;
+  capGroup.add(capSide);
+  const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.056, 30, 16), capMat);
+  capTop.scale.set(1, 0.34, 1);
+  capTop.position.y = 0.028;
+  capGroup.add(capTop);
+
+  const buttonHit = new THREE.Mesh(
+    new THREE.BoxGeometry(0.22, 0.16, 0.22),
+    new THREE.MeshBasicMaterial({ visible: false })
   );
-  btnBase.position.set(0.22, 0.044, 0.02);
-  deck.add(btnBase);
-
-  const hitMat = new THREE.MeshBasicMaterial({ visible: false });
-  const buttonHit = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.16, 0.2), hitMat);
-  buttonHit.position.set(0.22, 0.06, 0.02);
+  buttonHit.position.set(btnX, 0.09, btnZ);
   deck.add(buttonHit);
 
   /* ---------------- play chamber ---------------- */
 
-  const chamberBack = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.66), chamberPaint);
-  chamberBack.position.set(0, 0.98, -0.375);
-  chamberBack.receiveShadow = true;
-  root.add(chamberBack);
+  const floor = add(root, rbox(0.99, 0.028, 0.74, 0.014), azureMid, 0, 0.706, 0);
+  floor.receiveShadow = true;
 
-  const liner = new THREE.Mesh(new RoundedBoxGeometry(0.94, 0.6, 0.014, 2, 0.006), chamberPaint);
-  liner.position.set(0, 0.98, -0.366);
-  liner.receiveShadow = true;
-  root.add(liner);
-  jointB.box(0.004, 0.6, 0.005, -0.4725, 0.98, -0.3575);
-  jointB.box(0.004, 0.6, 0.005, 0.4725, 0.98, -0.3575);
-  jointB.box(0.944, 0.004, 0.005, 0, 1.2825, -0.3575);
-  jointB.box(0.944, 0.004, 0.005, 0, 0.6775, -0.3575);
-  screw(-0.447, 1.252, -0.356, 'front', 0.8);
-  screw(0.447, 1.252, -0.356, 'front', 0.8);
-  screw(-0.447, 0.708, -0.356, 'front', 0.8);
-  screw(0.447, 0.708, -0.356, 'front', 0.8);
-
-  const sideL = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.7, 0.78, 3, 0.02), pinkSide);
-  sideL.position.set(-0.485, 0.99, 0);
-  sideL.castShadow = true;
-  root.add(sideL);
-  const sideR = sideL.clone();
-  sideR.position.x = 0.485;
-  root.add(sideR);
-
-  const topCap = new THREE.Mesh(new RoundedBoxGeometry(1.06, 0.06, 0.82, 3, 0.02), blueSatin);
-  topCap.position.y = 1.355;
-  topCap.castShadow = true;
-  root.add(topCap);
-  // brushed edge under the cap
-  brushB.box(1.0, 0.006, 0.012, 0, 1.3245, 0.407);
-
-  const chamberFloor = new THREE.Mesh(new RoundedBoxGeometry(0.99, 0.03, 0.7, 3, 0.012), shell);
-  chamberFloor.position.y = 0.705;
-  chamberFloor.receiveShadow = true;
-  root.add(chamberFloor);
-
-  // horizontal joint where base meets display body
-  for (const x of [-0.4975, 0.4975]) {
-    const belt = new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.022, 0.78, 2, 0.006), shell);
-    belt.position.set(x, 0.628, 0);
-    belt.castShadow = true;
-    belt.receiveShadow = true;
-    root.add(belt);
-  }
-  jointB.box(0.004, 0.006, 0.762, -0.5095, 0.626, 0);
-  jointB.box(0.004, 0.006, 0.762, 0.5095, 0.626, 0);
-
-  /* ---------------- side service panels + vents ---------------- */
-
-  for (const side of [-1, 1] as const) {
-    const x = side * 0.5125;
-    const face: Face = side > 0 ? 'right' : 'left';
-    // flush outline of the removable access panel
-    jointB.box(0.003, 0.0045, 0.525, x, 0.455, -0.01);
-    jointB.box(0.003, 0.0045, 0.525, x, 0.165, -0.01);
-    jointB.box(0.003, 0.294, 0.0045, x, 0.31, -0.2725);
-    jointB.box(0.003, 0.294, 0.0045, x, 0.31, 0.2525);
-
-    // compressed rubber seal just outside the seam
-    rubberB.box(0.002, 0.006, 0.545, x + side * 0.0012, 0.463, -0.01);
-    rubberB.box(0.002, 0.006, 0.545, x + side * 0.0012, 0.157, -0.01);
-    rubberB.box(0.002, 0.31, 0.006, x + side * 0.0012, 0.31, -0.281);
-    rubberB.box(0.002, 0.31, 0.006, x + side * 0.0012, 0.31, 0.261);
-
-    // piano hinge on the rear edge
-    brushB.box(0.005, 0.3, 0.012, x + side * 0.002, 0.31, -0.2735);
-    for (const hy of [0.22, 0.31, 0.4]) {
-      brushB.cyl(0.0065, 0.055, x + side * 0.006, hy, -0.2785, 'y', 12);
-    }
-
-    // flush pull + finger slot
-    brushB.box(0.004, 0.036, 0.07, x + side * 0.0015, 0.425, 0.18);
-    jointB.box(0.0025, 0.009, 0.042, x + side * 0.0042, 0.425, 0.18);
-
-    // key lock near the front edge
-    brushB.box(0.004, 0.052, 0.052, x + side * 0.0015, 0.202, 0.213);
-    chromeB.cyl(0.013, 0.008, x + side * 0.006, 0.202, 0.213, 'x', 18);
-    jointB.box(0.0025, 0.016, 0.004, x + side * 0.0105, 0.202, 0.213);
-
-    // cooling vents with a brushed surround
-    darkB.box(0.0025, 0.09, 0.125, x + side * 0.0006, 0.085, -0.16);
-    brushB.box(0.002, 0.005, 0.135, x + side * 0.0018, 0.034, -0.16);
-    brushB.box(0.002, 0.005, 0.135, x + side * 0.0018, 0.136, -0.16);
-    brushB.box(0.002, 0.107, 0.005, x + side * 0.0018, 0.085, -0.2275);
-    brushB.box(0.002, 0.107, 0.005, x + side * 0.0018, 0.085, -0.0925);
-    for (let i = 0; i < 5; i++) {
-      darkB.box(0.0025, 0.0045, 0.105, x + side * 0.0012, 0.058 + i * 0.015, -0.16);
-    }
-
-    screw(x + side * 0.0012, 0.433, -0.244, face, 0.85);
-    screw(x + side * 0.0012, 0.433, 0.224, face, 0.85);
-    screw(x + side * 0.0012, 0.19, -0.244, face, 0.85);
-    screw(x + side * 0.0012, 0.19, 0.224, face, 0.85);
-  }
-
-  /* ---------------- corner angles (brushed) ---------------- */
-
-  function cornerAngle(cx: number, cz: number, h: number, y: number) {
-    // ix/iz point inward; sx/sz point outward (surface normals)
-    const ix = cx < 0 ? 1 : -1;
-    const iz = cz < 0 ? 1 : -1;
-    const sx = -ix;
-    const sz = -iz;
-    const xFace: Face = cx > 0 ? 'right' : 'left';
-    const zFace: Face = cz > 0 ? 'front' : 'back';
-    // front/back leg, standing 2.5 mm proud of the panel
-    brushB.box(0.034, h, 0.005, cx + ix * 0.017, y, cz + sz * 0.0025);
-    // side leg
-    brushB.box(0.005, h, 0.034, cx + sx * 0.0025, y, cz + iz * 0.017);
-    // rolled corner
-    brushB.cyl(0.0055, h, cx + sx * 0.0022, y, cz + sz * 0.0022, 'y', 10);
-    screw(cx + ix * 0.017, y + h * 0.27, cz + sz * 0.0058, zFace, 0.85);
-    screw(cx + ix * 0.017, y - h * 0.27, cz + sz * 0.0058, zFace, 0.85);
-    screw(cx + sx * 0.0058, y, cz + iz * 0.018, xFace, 0.8);
-  }
-
-  for (const x of [-0.51, 0.51]) {
-    for (const z of [0.39, -0.39]) {
-      cornerAngle(x, z, 0.1, 0.1);
-    }
-  }
-  // roof corner caps
-  for (const x of [-0.528, 0.528]) {
-    for (const z of [0.408, -0.408]) {
-      cornerAngle(x, z, 0.052, 1.355);
-    }
-  }
-  // cap retaining screws on the top face rail
-  for (const x of [-0.36, 0.36]) {
-    screw(x, 1.353, 0.4116, 'front', 0.9);
-  }
-
-  /* ---------------- glass + frame + gaskets ---------------- */
-
-  const glassFront = new THREE.Mesh(new THREE.PlaneGeometry(0.93, 0.62), glass);
-  glassFront.position.set(0, 1.03, 0.392);
-  root.add(glassFront);
-
-  // studio reflections: a broad band + a narrow one, both soft-edged
-  const reflMap = streakTexture();
-  for (const [w, h, x, y, op, ro] of [
-    [0.86, 0.2, -0.03, 1.13, 0.2, 0.42],
-    [0.42, 0.055, -0.24, 0.9, 0.14, 0.42],
+  // chute mouth in the floor
+  add(root, new THREE.PlaneGeometry(0.2, 0.2), new THREE.MeshBasicMaterial({ color: '#14213a' }), -0.31, 0.7212, 0, false).rotation.x = -Math.PI / 2;
+  for (const [w, d, x, z] of [
+    [0.22, 0.014, -0.31, 0.107],
+    [0.22, 0.014, -0.31, -0.107],
+    [0.014, 0.2, -0.417, 0],
+    [0.014, 0.2, -0.203, 0],
   ]) {
-    const r = new THREE.Mesh(
+    add(root, new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color: '#9bdcff' }), x, 0.7214, z, false).rotation.x = -Math.PI / 2;
+  }
+
+  // clean pale-blue back wall
+  add(root, new THREE.PlaneGeometry(1.0, 0.65), new THREE.MeshBasicMaterial({ color: '#a9d8f7' }), 0, 0.985, -0.381, false);
+  const backTex = chamberBackTexture();
+  add(root, new THREE.PlaneGeometry(0.94, 0.6), printed(backTex, { roughness: 0.6, clearcoat: 0.2, envMapIntensity: 0.55 }), 0, 0.98, -0.372, false);
+
+  // ceiling: pale blue so the chamber never reads hollow from below
+  add(root, rbox(0.99, 0.018, 0.74, 0.006), azurePale, 0, 1.326, 0, false);
+  add(root, new THREE.PlaneGeometry(0.94, 0.7), new THREE.MeshBasicMaterial({ color: '#d8f2ff' }), 0, 1.316, 0, false).rotation.x = Math.PI / 2;
+
+  // azure corner posts + top/bottom side rails
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      add(root, rbox(0.078, 0.64, 0.07, 0.02), azure, sx * 0.495, 1.025, sz * 0.35);
+    }
+    add(root, rbox(0.078, 0.05, 0.78, 0.016), azureDeep, sx * 0.495, 0.738, 0);
+    add(root, rbox(0.078, 0.05, 0.78, 0.016), azureDeep, sx * 0.495, 1.312, 0);
+    // side glass
+    const sidePane = add(root, new THREE.PlaneGeometry(0.68, 0.575), glass, sx * 0.5015, 1.025, 0, false);
+    sidePane.rotation.y = sx * (Math.PI / 2);
+    sidePane.renderOrder = 3;
+  }
+
+  // pink front frame: four chunky rounded bars
+  const frameZ = 0.394;
+  add(root, rbox(1.02, 0.055, 0.085, 0.02), pink, 0, 1.321, frameZ);
+  add(root, rbox(1.02, 0.055, 0.085, 0.02), pink, 0, 0.735, frameZ);
+  add(root, rbox(0.055, 0.64, 0.085, 0.02), pink, -0.4825, 1.028, frameZ);
+  add(root, rbox(0.055, 0.64, 0.085, 0.02), pink, 0.4825, 1.028, frameZ);
+
+  // inner white keyline + pale-blue gasket
+  add(root, rbox(0.926, 0.014, 0.02, 0.005), porcelain, 0, 1.292, 0.4285, false);
+  add(root, rbox(0.926, 0.014, 0.02, 0.005), porcelain, 0, 0.764, 0.4285, false);
+  add(root, rbox(0.014, 0.546, 0.02, 0.005), porcelain, -0.456, 1.028, 0.4285, false);
+  add(root, rbox(0.014, 0.546, 0.02, 0.005), porcelain, 0.456, 1.028, 0.4285, false);
+
+  // glass front
+  const glassFront = add(root, new THREE.PlaneGeometry(0.925, 0.575), glass, 0, 1.025, 0.401, false);
+  glassFront.renderOrder = 3;
+
+  // studio reflections, additive and soft-edged
+  const streak = streakTexture();
+  for (const [w, h, x, y, op, rz] of [
+    [0.84, 0.17, -0.02, 1.14, 0.09, 0.42],
+    [0.36, 0.05, -0.26, 0.9, 0.07, 0.42],
+    [0.06, 0.5, 0.41, 1.06, 0.06, 0],
+  ]) {
+    const r = add(
+      root,
       new THREE.PlaneGeometry(w, h),
       new THREE.MeshBasicMaterial({
-        map: reflMap,
+        map: streak,
         transparent: true,
         opacity: op,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-      })
+      }),
+      x,
+      y,
+      0.409,
+      false
     );
-    r.position.set(x, y, 0.3975);
-    r.rotation.z = ro;
-    r.renderOrder = 3;
-    root.add(r);
+    r.rotation.z = rz;
+    r.renderOrder = 4;
   }
 
-  const frameMat = blueGloss;
-  const railH = new RoundedBoxGeometry(1.0, 0.028, 0.05, 2, 0.006);
-  const railV = new RoundedBoxGeometry(0.03, 0.62, 0.05, 2, 0.006);
-  const railTop = new THREE.Mesh(railH, frameMat);
-  railTop.position.set(0, 1.33, 0.395);
-  railTop.castShadow = true;
-  root.add(railTop);
-  const railBottom = new THREE.Mesh(railH, frameMat);
-  railBottom.position.set(0, 0.724, 0.395);
-  railBottom.castShadow = true;
-  root.add(railBottom);
-  for (const x of [-0.49, 0.49]) {
-    const r = new THREE.Mesh(railV, frameMat);
-    r.position.set(x, 1.03, 0.395);
-    r.castShadow = true;
-    root.add(r);
-  }
-
-  // rubber gasket between glass and frame
-  rubberB.box(0.928, 0.011, 0.012, 0, 1.3095, 0.401);
-  rubberB.box(0.928, 0.011, 0.012, 0, 0.7445, 0.401);
-  rubberB.box(0.011, 0.556, 0.012, -0.4685, 1.027, 0.401);
-  rubberB.box(0.011, 0.556, 0.012, 0.4685, 1.027, 0.401);
-
-  // rubber edge between side glass and front frame
-  for (const x of [-0.5145, 0.5145]) {
-    rubberB.box(0.011, 0.664, 0.012, x, 0.99, 0.3925);
-    rubberB.box(0.011, 0.664, 0.012, x, 0.99, -0.3925);
-  }
-  // and around the side glass panes
-  for (const side of [-1, 1] as const) {
-    const x = side * 0.5135;
-    rubberB.box(0.006, 0.008, 0.752, x, 0.6635, 0);
-    rubberB.box(0.006, 0.008, 0.752, x, 1.3165, 0);
-    rubberB.box(0.006, 0.662, 0.008, x, 0.99, 0.3765);
-    rubberB.box(0.006, 0.662, 0.008, x, 0.99, -0.3765);
-  }
-
-  // brushed corner gussets on the glass frame
+  // cool LED tubes inside the chamber
   for (const sx of [-1, 1]) {
-    for (const sy of [-1, 1]) {
-      const px = sx * 0.487;
-      const py = 1.027 + sy * 0.291;
-      brushB.box(0.046, 0.046, 0.004, px, py, 0.421);
-      screw(px, py + sy * 0.012, 0.4245, 'front', 0.7);
-    }
-  }
-  screw(-0.33, 0.724, 0.4215, 'front', 0.8);
-  screw(0.33, 0.724, 0.4215, 'front', 0.8);
-  screw(-0.33, 1.33, 0.4215, 'front', 0.8);
-  screw(0.33, 1.33, 0.4215, 'front', 0.8);
-  screw(-0.49, 0.9, 0.4215, 'front', 0.75);
-  screw(0.49, 0.9, 0.4215, 'front', 0.75);
-  screw(-0.49, 1.16, 0.4215, 'front', 0.75);
-  screw(0.49, 1.16, 0.4215, 'front', 0.75);
-
-  // front door lock on the bottom rail
-  brushB.box(0.058, 0.023, 0.005, 0.2, 0.724, 0.422);
-  chromeB.cyl(0.0122, 0.008, 0.2, 0.724, 0.4245, 'z', 16);
-  jointB.box(0.0035, 0.014, 0.003, 0.2, 0.724, 0.429);
-
-  // hinges on the left rail
-  for (const y of [0.875, 1.185]) {
-    brushB.box(0.006, 0.072, 0.026, -0.5068, y, 0.409);
-    chromeB.cyl(0.0058, 0.062, -0.5125, y, 0.4145, 'y', 10);
-    screw(-0.5105, y + 0.022, 0.412, 'left', 0.65);
-    screw(-0.5105, y - 0.022, 0.412, 'left', 0.65);
-  }
-
-  /* ---------------- LED channels inside ---------------- */
-
-  const ledMat = glow('#fff3d6', 2.2);
-  for (const x of [-0.45, 0.45]) {
-    darkB.box(0.016, 0.58, 0.012, x, 1.0, 0.331);
-    const led = new THREE.Mesh(new THREE.CapsuleGeometry(0.007, 0.556, 4, 8), ledMat);
-    led.position.set(x, 1.0, 0.339);
-    root.add(led);
-    for (const y of [0.77, 1.0, 1.23]) {
-      brushB.box(0.024, 0.012, 0.01, x, y, 0.3375);
-    }
-    const glowSprite = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.12, 0.7),
+    const led = add(root, new THREE.CapsuleGeometry(0.0065, 0.52, 4, 10), glow('#eaf8ff', 2.1), sx * 0.438, 1.02, 0.29, false);
+    led.renderOrder = 4;
+    add(root, rbox(0.02, 0.6, 0.014, 0.005), azureDeep, sx * 0.438, 1.02, 0.28, false);
+    const spill = add(
+      root,
+      new THREE.PlaneGeometry(0.10, 0.62),
       new THREE.MeshBasicMaterial({
-        color: '#fff3d6',
+        color: '#dff6ff',
         transparent: true,
-        opacity: 0.16,
+        opacity: 0.22,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-      })
+      }),
+      sx * 0.43,
+      1.02,
+      0.296,
+      false
     );
-    glowSprite.position.set(x * 0.97, 1.0, 0.348);
-    root.add(glowSprite);
+    spill.renderOrder = 4;
   }
 
-  /* ---------------- marquee / lightbox ---------------- */
+  // white light bar under the roof
+  add(root, new THREE.CapsuleGeometry(0.008, 0.8, 4, 10), glow('#f2fbff', 1.6), 0, 1.292, -0.24, false).rotation.z = Math.PI / 2;
 
-  const marquee = new THREE.Mesh(new RoundedBoxGeometry(1.02, 0.32, 0.12, 3, 0.03), blueSatin);
-  marquee.position.set(0, 1.53, 0.26);
-  marquee.castShadow = true;
-  root.add(marquee);
+  /* ---------------- blue header band ---------------- */
 
-  const mtex = marqueeTexture();
-  const face = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.93, 0.29),
+  add(root, rbox(1.045, 0.12, 0.11, 0.02), azureDeep, 0, 1.397, 0.345);
+  add(
+    root,
+    new THREE.PlaneGeometry(1.022, 0.108),
+    printed(headerTexture(), { roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.1 }),
+    0,
+    1.397,
+    0.4015,
+    false
+  );
+  add(root, rbox(1.05, 0.012, 0.115, 0.005), glow('#eaf9ff', 1.2), 0, 1.455, 0.345, false);
+  add(root, rbox(1.05, 0.01, 0.115, 0.004), azurePale, 0, 1.34, 0.345, false);
+
+  /* ---------------- marquee ---------------- */
+
+  add(root, rbox(1.1, 0.345, 0.175, 0.035), pinkDeep, 0, 1.602, 0.295);
+  add(root, rbox(1.05, 0.305, 0.18, 0.028), pink, 0, 1.602, 0.302);
+  add(root, rbox(1.108, 0.026, 0.185, 0.008), pinkInk, 0, 1.784, 0.295);
+  add(root, rbox(1.108, 0.02, 0.185, 0.007), pinkInk, 0, 1.432, 0.295);
+
+  const marqueeTex = marqueeTexture();
+  add(
+    root,
+    new THREE.PlaneGeometry(0.99, 0.289),
+    backlit(marqueeTex, 0.34),
+    0,
+    1.602,
+    0.3945,
+    false
+  );
+
+  // thin acrylic sheet over the lightbox + two glare bands
+  const acrylic = add(
+    root,
+    new THREE.PlaneGeometry(0.995, 0.293),
     new THREE.MeshPhysicalMaterial({
-      map: mtex,
-      emissive: new THREE.Color('#ffffff'),
-      emissiveMap: mtex,
-      emissiveIntensity: 0.8,
-      roughness: 0.32,
-      clearcoat: 0.7,
-      clearcoatRoughness: 0.06,
-    })
+      color: '#eaf7ff',
+      roughness: 0.04,
+      metalness: 0,
+      transparent: true,
+      opacity: 0.08,
+      clearcoat: 1,
+      clearcoatRoughness: 0.02,
+      side: THREE.DoubleSide,
+      envMapIntensity: 1.4,
+      depthWrite: false,
+    }),
+    0,
+    1.602,
+    0.397,
+    false
   );
-  face.position.set(0, 1.53, 0.3215);
-  root.add(face);
-
-  // bezel bars: print sits behind a real frame, not glued on the box
-  for (const y of [1.385, 1.675]) {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.012, 0.012), blueGloss);
-    bar.position.set(0, y, 0.325);
-    root.add(bar);
-  }
-  for (const x of [-0.4745, 0.4745]) {
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.29, 0.012), blueGloss);
-    bar.position.set(x, 1.53, 0.325);
-    root.add(bar);
-  }
-
-  // clear acrylic face + edge-lit strips
-  const acrylic = new THREE.Mesh(new RoundedBoxGeometry(0.948, 0.292, 0.006, 2, 0.002), clear);
-  acrylic.position.set(0, 1.53, 0.3275);
   acrylic.renderOrder = 3;
-  root.add(acrylic);
-  for (const y of [1.3875, 1.6725]) {
-    const edge = new THREE.Mesh(
-      new THREE.BoxGeometry(0.9, 0.0045, 0.004),
-      glow('#e7f0ff', 1.7)
-    );
-    edge.position.set(0, y, 0.33);
-    root.add(edge);
-  }
-  for (const x of [-0.4695, 0.4695]) {
-    const edge = new THREE.Mesh(
-      new THREE.BoxGeometry(0.0045, 0.282, 0.004),
-      glow('#dfeaff', 1.15)
-    );
-    edge.position.set(x, 1.53, 0.33);
-    root.add(edge);
-  }
-
-  // emissive halo that spills past the housing
-  const halo = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.34, 0.58),
-    new THREE.MeshBasicMaterial({
-      map: haloTexture(),
-      color: '#bcd1ff',
-      transparent: true,
-      opacity: 0.9,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-  );
-  halo.position.set(0, 1.53, 0.3242);
-  halo.renderOrder = 4;
-  root.add(halo);
-
-  // light spill on the roof cap
-  const spill = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.0, 0.24),
-    new THREE.MeshBasicMaterial({
-      map: spillTexture(),
-      color: '#cfe0ff',
-      transparent: true,
-      opacity: 0.3,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    })
-  );
-  spill.rotation.x = -Math.PI / 2;
-  spill.position.set(0, 1.3868, 0.3);
-  spill.renderOrder = 4;
-  root.add(spill);
-
-  // dark reveal where the lightbox meets the roof
-  jointB.box(0.98, 0.006, 0.006, 0, 1.3845, 0.3225);
-  jointB.box(0.98, 0.004, 0.006, 0, 1.6905, 0.3225);
-
-  // brushed corner tabs + screws on the sign
-  for (const sx of [-1, 1]) {
-    for (const sy of [-1, 1]) {
-      brushB.box(0.044, 0.044, 0.004, sx * 0.459, 1.53 + sy * 0.125, 0.328);
-      screw(sx * 0.459, 1.53 + sy * 0.125, 0.3312, 'front', 0.7);
-    }
-  }
-  // side mount screws into the housing
-  for (const sx of [-1, 1]) {
-    for (const sy of [-1, 1]) {
-      screw(sx * 0.5125, 1.53 + sy * 0.1, 0.26, sx > 0 ? 'right' : 'left', 0.8);
-    }
-  }
-
-  // crown cap
-  const crown = new THREE.Mesh(new RoundedBoxGeometry(0.99, 0.02, 0.105, 2, 0.006), blueSatin);
-  crown.position.set(0, 1.705, 0.26);
-  crown.castShadow = true;
-  root.add(crown);
-
-  /* ---------------- decals ---------------- */
-
-  const front = 0.3948;
-  const decalSpecs: [string, number, number, number, number, number, number, number, number][] = [
-    // label, w, h, x, y, z, rotY, rotZ, opacity
-    ['うけとりぐち', 0.095, 0.034, 0.03, 0.302, front, 0, -0.012, 0.95],
-    ['FRAGILE', 0.11, 0.042, 0.22, 0.355, front, 0, 0.014, 0.95],
-    ['CAUTION', 0.095, 0.038, 0.35, 0.185, front, 0, -0.02, 0.93],
-    ['MADE IN JAPAN', 0.1, 0.034, 0.11, 0.17, front, 0, 0.018, 0.9],
-    ['ゲット', 0.13, 0.052, -0.12, 0.48, 0.6048, 0, -0.008, 0.96],
-    ['あそびかた', 0.1, 0.04, 0.385, 0.47, 0.6048, 0, 0.01, 0.95],
-    ['HANDLE WITH CARE', 0.24, 0.085, 0.5128, 0.445, -0.12, Math.PI / 2, 0.016, 0.92],
-    ['けんびき', 0.16, 0.065, -0.5128, 0.36, 0.12, -Math.PI / 2, -0.014, 0.94],
-  ];
-  for (const [label, w, h, x, y, z, rotY, rotZ, opacity] of decalSpecs) {
-    const rect = rects[label];
-    if (!rect) continue;
-    const d = decalMesh(atlas, rect, w, h, { opacity });
-    d.position.set(x, y, z);
-    d.rotation.set(0, rotY, rotZ);
-    root.add(d);
-  }
-
-  // a few real scuffs, not stickers: worn edges where hands and shoes land
-  const scuffMat = new THREE.MeshBasicMaterial({
-    map: scuffTexture(),
-    color: '#5a4c40',
-    transparent: true,
-    opacity: 0.32,
-    depthWrite: false,
-  });
-  for (const [w, h, x, y, z, ry] of [
-    [0.16, 0.09, -0.42, 0.195, 0.3943, 0],
-    [0.1, 0.06, 0.31, 0.155, 0.3943, 0],
-    [0.14, 0.1, 0.5129, 0.11, -0.05, Math.PI / 2],
+  for (const [w, h, x, y, op, rz] of [
+    [0.72, 0.05, -0.08, 1.7, 0.16, 0.03],
+    [0.4, 0.024, 0.2, 1.51, 0.1, -0.02],
   ]) {
-    const s = new THREE.Mesh(new THREE.PlaneGeometry(w, h), scuffMat);
-    s.position.set(x, y, z);
-    s.rotation.y = ry;
-    s.renderOrder = 1;
-    root.add(s);
+    const r = add(
+      root,
+      new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({
+        map: streak,
+        transparent: true,
+        opacity: op,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+      x,
+      y,
+      0.399,
+      false
+    );
+    r.rotation.z = rz;
+    r.renderOrder = 4;
   }
 
-  /* ---------------- finish detail batches ---------------- */
+  // vertical ポートフォリオ on the right flank of the marquee
+  const sideTex = sideDecalTexture();
+  const sideDecal = add(
+    root,
+    new THREE.PlaneGeometry(0.105, 0.265),
+    new THREE.MeshPhysicalMaterial({
+      map: sideTex,
+      transparent: true,
+      roughness: 0.4,
+      clearcoat: 0.5,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    }),
+    0.5525,
+    1.602,
+    0.302,
+    false
+  );
+  sideDecal.rotation.y = Math.PI / 2;
+  sideDecal.renderOrder = 3;
 
-  rubberB.finish(rub, root, false);
-  jointB.finish(joint, root, false);
-  brushB.finish(brush, root, true);
-  chromeB.finish(chrome(), root, true);
-  darkB.finish(matte('#0d0b09'), root, false);
-  buildScrews(root, screwSpecs);
-  buildScrews(deck, deckScrews);
+  // side caps on the marquee
+  for (const sx of [-1, 1]) {
+    add(root, rbox(0.028, 0.32, 0.185, 0.012), pinkDeep, sx * 0.546, 1.602, 0.295);
+  }
 
-  /* ---------------- button animation ---------------- */
+  /* ---------------- decals from the atlas ---------------- */
+
+  label(root, atlas, rects, 'うけとりぐち', 0.105, 0.034, -0.265, 0.372, 0.4015);
+  label(root, atlas, rects, 'あそびかた', 0.11, 0.037, 0.33, 0.735, 0.4395);
+  label(root, atlas, rects, 'NO STEP', 0.082, 0.03, 0.36, 0.074, 0.4095);
+  label(root, atlas, rects, 'HANDLE WITH CARE', 0.15, 0.052, -0.5125, 0.34, 0.05, -Math.PI / 2, 0.01);
+  label(root, atlas, rects, 'PRIZE', 0.09, 0.032, 0.5125, 0.27, -0.08, Math.PI / 2, -0.015);
+  label(root, atlas, rects, 'WARNING', 0.12, 0.042, 0.5125, 0.5, -0.16, Math.PI / 2, 0.01);
+  label(root, atlas, rects, 'ゲット', 0.078, 0.078, 0.355, 0.535, 0.4015);
+
+  /* ---------------- button behaviour ---------------- */
 
   let press = 0;
   let enabled = true;
-  const btnBaseY = btn.position.y;
+  const capBaseY = capGroup.position.y;
 
   function pressButton() {
     press = 1;
   }
+
   function setButtonEnabled(on: boolean) {
     enabled = on;
-    (btn.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? 0.35 : 0.05;
+    (capMat as THREE.MeshStandardMaterial).emissiveIntensity = on ? 0.9 : 0.12;
+    (btnGlowRing.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? 1.6 : 0.15;
   }
+
   function update(dt: number) {
     if (press > 0) {
       press = Math.max(0, press - dt * 4.5);
-      btn.position.y = btnBaseY - 0.008 * Math.sin(press * Math.PI);
+      capGroup.position.y = capBaseY - 0.01 * Math.sin((1 - press) * Math.PI);
     }
-    const pulse = enabled ? 0.3 + Math.sin(performance.now() * 0.003) * 0.12 : 0.05;
-    (btn.material as THREE.MeshStandardMaterial).emissiveIntensity = pulse;
+    const pulse = enabled ? 0.85 + Math.sin(performance.now() * 0.0032) * 0.18 : 0.12;
+    (capMat as THREE.MeshStandardMaterial).emissiveIntensity = pulse;
   }
 
-  return { root, glass, buttonHit, pressButton, setButtonEnabled, update };
+  return { root, glass, buttonHit, pressButton, setButtonEnabled, update, stick, capGroup };
 }

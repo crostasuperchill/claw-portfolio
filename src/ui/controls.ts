@@ -3,114 +3,118 @@ import * as THREE from 'three';
 export type Controls = { dispose(): void };
 
 /**
- * Input arcade: il puntatore non muove il claw, muove solo la LEVETTA.
- * - trascini la levetta (entro il suo raggio) e il claw si sposta in quella direzione
- * - tocchi il bottone giallo e il braccio scende
- * - tastiera resta come fallback desktop
+ * Input arcade, due sole affordance reali:
+ * - LEVETTA: la trascini (o trascini nella fascia del deck) e il claw si sposta
+ * - BOTTONE: lo premi e il braccio scende, con corsa visibile anche quando la
+ *   macchina è occupata (il feedback arriva prima della logica)
+ * Hit test in spazio schermo, niente raycast: non dipende dal merge della
+ * geometria né dalla forma esatta del modello.
  */
 export function createControls(opts: {
   canvas: HTMLCanvasElement;
   camera: THREE.Camera;
-  hitTarget: THREE.Object3D;
-  /** centro della levetta in pixel CSS, ricalcolato ad ogni gesture */
   stickCenter: () => { x: number; y: number };
+  buttonCenter: () => { x: number; y: number };
   canDrop: () => boolean;
   onStick: (x: number, y: number) => void;
+  onPress: () => void;
   onDrop: () => void;
   onFirstGesture?: () => void;
   onDragStart?: () => void;
 }) {
-  const raycaster = new THREE.Raycaster();
-  const ndc = new THREE.Vector2();
-  const STICK_RADIUS = 78;
+  const STICK_R = 105;
+  const BUTTON_R = 90;
   let dragId: number | null = null;
+  let active = false;
   let startX = 0;
   let startY = 0;
-  let stickActive = false;
 
-  function toNdc(e: PointerEvent) {
+  function local(e: PointerEvent) {
     const r = opts.canvas.getBoundingClientRect();
-    ndc.set(
-      ((e.clientX - r.left) / r.width) * 2 - 1,
-      -((e.clientY - r.top) / r.height) * 2 + 1
-    );
+    return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width, h: r.height };
   }
 
-  function overButton(e: PointerEvent) {
-    toNdc(e);
-    raycaster.setFromCamera(ndc, opts.camera);
-    return raycaster.intersectObject(opts.hitTarget, true).length > 0;
-  }
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.hypot(a.x - b.x, a.y - b.y);
 
-  function nearStick(e: PointerEvent) {
-    const r = opts.canvas.getBoundingClientRect();
-    const localX = e.clientX - r.left;
-    const localY = e.clientY - r.top;
-    const c = opts.stickCenter();
-    const d = Math.hypot(localX - c.x, localY - c.y);
-    if (d < STICK_RADIUS * 1.6) return true;
-    // zona comandi: tutto il terzo basso dello schermo inclina la levetta.
-    // così l'input funziona anche se il modello della levetta cambia forma.
-    return localY > r.height * 0.62 && localY < r.height * 0.94;
-  }
-
-  function emit(clientX: number, clientY: number) {
-    let dx = clientX - startX;
-    let dy = clientY - startY;
+  function emit(x: number, y: number) {
+    let dx = x - startX;
+    let dy = y - startY;
     const len = Math.hypot(dx, dy);
-    if (len > STICK_RADIUS) {
-      dx = (dx / len) * STICK_RADIUS;
-      dy = (dy / len) * STICK_RADIUS;
+    if (len > STICK_R) {
+      dx = (dx / len) * STICK_R;
+      dy = (dy / len) * STICK_R;
     }
-    opts.onStick(dx / STICK_RADIUS, -dy / STICK_RADIUS);
+    opts.onStick(dx / STICK_R, -dy / STICK_R);
   }
 
   function down(e: PointerEvent) {
     opts.onFirstGesture?.();
-    if (opts.canDrop() && overButton(e)) {
-      opts.onDrop();
+    const p = local(e);
+
+    if (dist(p, opts.buttonCenter()) < BUTTON_R) {
+      // corsa del bottone sempre; la logica decide se il braccio scende
+      opts.onPress();
+      if (opts.canDrop()) opts.onDrop();
       return;
     }
-    if (!nearStick(e)) return;
-    stickActive = true;
+
+    const stick = opts.stickCenter();
+    const nearStick = dist(p, stick) < STICK_R * 1.5;
+    // fascia del deck: una banda attorno alla riga dei comandi
+    const onDeck = Math.abs(p.y - stick.y) < 150;
+    if (!nearStick && !onDeck) return;
+
+    active = true;
     dragId = e.pointerId;
-    startX = e.clientX;
-    startY = e.clientY;
+    startX = p.x;
+    startY = p.y;
     try {
       opts.canvas.setPointerCapture(e.pointerId);
     } catch {
-      /* pointer sintetici */
+      /* puntatori sintetici nei test */
     }
     opts.onDragStart?.();
-    emit(e.clientX, e.clientY);
+    emit(p.x, p.y);
   }
 
   function move(e: PointerEvent) {
-    if (!stickActive || dragId !== e.pointerId) return;
-    emit(e.clientX, e.clientY);
+    if (!active || dragId !== e.pointerId) return;
+    const p = local(e);
+    emit(p.x, p.y);
   }
 
   function up(e: PointerEvent) {
     if (dragId !== e.pointerId) return;
     dragId = null;
-    stickActive = false;
+    active = false;
     opts.onStick(0, 0);
   }
 
+  const keys = new Set<string>();
   function key(e: KeyboardEvent) {
-    const step = 0.035;
-    if (e.key === 'ArrowLeft') opts.onStick(-step * 8, 0);
-    else if (e.key === 'ArrowRight') opts.onStick(step * 8, 0);
-    else if (e.key === 'ArrowUp') opts.onStick(0, step * 8);
-    else if (e.key === 'ArrowDown') opts.onStick(0, -step * 8);
-    else if (e.key === ' ') {
+    if (e.key === ' ' || e.key === 'Enter') {
+      opts.onPress();
       if (opts.canDrop()) opts.onDrop();
       e.preventDefault();
+      return;
     }
+    if (!e.key.startsWith('Arrow')) return;
+    keys.add(e.key);
+    e.preventDefault();
+    opts.onStick(
+      (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0),
+      (keys.has('ArrowUp') ? 1 : 0) - (keys.has('ArrowDown') ? 1 : 0)
+    );
   }
 
   function keyUp(e: KeyboardEvent) {
-    if (e.key.startsWith('Arrow')) opts.onStick(0, 0);
+    if (!e.key.startsWith('Arrow')) return;
+    keys.delete(e.key);
+    opts.onStick(
+      (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0),
+      (keys.has('ArrowUp') ? 1 : 0) - (keys.has('ArrowDown') ? 1 : 0)
+    );
   }
 
   opts.canvas.addEventListener('pointerdown', down);

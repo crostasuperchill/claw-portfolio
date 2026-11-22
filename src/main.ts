@@ -36,7 +36,17 @@ async function boot() {
 
   const atlas = buildDecalAtlas();
   const cabinet = buildCabinet(atlas.texture, atlas.rects);
-  mergeStatic(cabinet.root);
+  mergeStatic(cabinet.root, {
+    // qualunque parte animata (levetta, cap del bottone, dita) resta fuori dal merge
+    skip: (mesh) => {
+      let node: THREE.Object3D | null = mesh;
+      while (node) {
+        if (node.userData.noMerge) return true;
+        node = node.parent;
+      }
+      return false;
+    },
+  });
   studio.scene.add(cabinet.root);
   bootFill.style.width = '42%';
   bootLabel.textContent = 'lighting the cabinet';
@@ -134,19 +144,23 @@ async function boot() {
     cabinet.pressButton();
     cabinet.setButtonEnabled(false);
     hint.classList.remove('show');
-    audio.servo(1.0);
+    audio.button();
+    audio.drop(1.0);
   }
 
   function enter(phase: Phase) {
     if (phase === 'carry') {
       claw.target.set(D.chute.x, D.chute.z);
-      audio.servo(0.9);
+      audio.motor(0.9);
+    } else if (phase === 'lift') {
+      if (!claw.grabbed) audio.fail();
     } else if (phase === 'release') {
       if (claw.grabbed) pendingPrize = claw.grabbed;
       claw.release();
-      audio.clink();
+      audio.release(!!claw.grabbed);
     } else if (phase === 'return') {
       claw.target.set(0, 0.02);
+      audio.motor(1.0);
     } else if (phase === 'idle') {
       cabinet.setButtonEnabled(true);
       claw.setHeight(HOME);
@@ -162,7 +176,7 @@ async function boot() {
       if (!grabTried && cycle.k > 0.55) {
         grabTried = true;
         claw.tryGrab();
-        audio.clack();
+        audio.clawClose(!!claw.grabbed);
       }
     } else if (cycle.phase === 'lift') {
       claw.setHeight(lerp(DROP, HOME, easeInOut(cycle.k)));
@@ -183,21 +197,30 @@ async function boot() {
     cardOpen = true;
     card.show(project, isNew);
     cabinet.setButtonEnabled(false);
-    audio.win();
+    audio.cardOpen();
+    audio.deliver(isNew, collection.size >= PROJECTS.length);
     pendingPrize = null;
   }
 
   const stickWorld = new THREE.Vector3();
+  function project(world: THREE.Vector3) {
+    const v = world.clone().project(studio.camera);
+    const r = canvas.getBoundingClientRect();
+    return { x: (v.x * 0.5 + 0.5) * r.width, y: (-v.y * 0.5 + 0.5) * r.height };
+  }
   function stickCenter() {
     const node = (cabinet as unknown as { stick?: THREE.Object3D }).stick;
     if (node) {
       node.getWorldPosition(stickWorld);
-      stickWorld.y += 0.05;
+      stickWorld.y += 0.1;
     } else {
       stickWorld.set(-0.3, 0.16, 0.34);
     }
-    const v = stickWorld.clone().project(studio.camera);
-    return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight };
+    return project(stickWorld);
+  }
+  function buttonCenter() {
+    cabinet.buttonHit.getWorldPosition(stickWorld);
+    return project(stickWorld);
   }
 
   let stickX = 0;
@@ -206,18 +229,15 @@ async function boot() {
   createControls({
     canvas,
     camera: studio.camera,
-    hitTarget: cabinet.buttonHit,
     stickCenter,
+    buttonCenter,
     canDrop: () => cycle.phase === 'idle' && !cardOpen,
     onStick: (x, y) => {
+      audio.stick(x, y);
       stickX = x;
       stickY = y;
-      const node = (cabinet as unknown as { stick?: THREE.Object3D }).stick;
-      if (node) {
-        node.rotation.z = -x * 0.42;
-        node.rotation.x = y * 0.32;
-      }
     },
+    onPress: () => cabinet.pressButton(),
     onDrop: startCycle,
     onFirstGesture: () => audio.unlock(),
     onDragStart: () => hint.classList.remove('show'),
@@ -240,6 +260,14 @@ async function boot() {
 
     acc += dt;
     if (cycle.phase === 'idle' && !cardOpen) claw.aim(stickX * 0.42 * dt, -stickY * 0.3 * dt);
+
+    // levetta: molla verso la posizione inclinata, torna da sola al centro
+    const stick = (cabinet as unknown as { stick?: THREE.Object3D }).stick;
+    if (stick) {
+      const k = Math.min(1, dt * 16);
+      stick.rotation.z += (-stickX * 0.5 - stick.rotation.z) * k;
+      stick.rotation.x += (stickY * 0.38 - stick.rotation.x) * k;
+    }
     let steps = 0;
     while (acc >= 1 / 60 && steps < 2) {
       world.step();
@@ -348,6 +376,28 @@ async function boot() {
     },
     probe: () => claw.probe(),
     target: () => ({ x: claw.target.x, z: claw.target.y }),
+    stickScreen: () => stickCenter(),
+    buttonScreen: () => buttonCenter(),
+    ui: () => {
+      const s = (cabinet as unknown as { stick?: THREE.Object3D }).stick;
+      return {
+        stickChildren: s?.children.length ?? -1,
+        rotX: s ? +s.rotation.x.toFixed(3) : -99,
+        rotZ: s ? +s.rotation.z.toFixed(3) : -99,
+        stickWorld: s ? s.getWorldPosition(new THREE.Vector3()).toArray().map((n) => +n.toFixed(3)) : null,
+        capY: +(cabinet as unknown as { capGroup?: THREE.Object3D }).capGroup!.position.y.toFixed(4),
+      };
+    },
+    hitAt: (x: number, y: number) => {
+      const rc = new THREE.Raycaster();
+      const r = canvas.getBoundingClientRect();
+      rc.setFromCamera(
+        new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1),
+        studio.camera
+      );
+      const hits = rc.intersectObject(cabinet.buttonHit, true);
+      return { hit: hits.length > 0, dist: hits[0]?.distance ?? null };
+    },
     debug: () => ({
       grabbed: claw.grabbed?.projectId ?? null,
       joint: claw.hasJoint,
