@@ -14,12 +14,12 @@ const TAU = Math.PI * 2;
  * Esportata perché main.ts / altri layer possano riusarla.
  */
 export const CAPSULE_PALETTE = [
-  '#7bc8f7', // azzurro — MagicWall
-  '#f887ba', // rosa — Jollycat
-  '#fbcf3d', // giallo — ZORA
-  '#b392f5', // lilla — Oracle
-  '#6fe0b5', // menta — Polaroids
-  '#ffa875', // pesca — Say hi
+  '#3aa6e8', // azzurro — MagicWall
+  '#f04d95', // rosa — Jollycat
+  '#f0b41a', // giallo — ZORA
+  '#8a5fe6', // lilla — Oracle
+  '#43cfa0', // menta — Polaroids
+  '#ff7e45', // pesca — Say hi
 ] as const;
 
 /**
@@ -33,19 +33,19 @@ function plasticTint(input: THREE.ColorRepresentation): THREE.Color {
   c.getHSL(hsl);
   // progetto nero/grigio -> pesca, così resta nella palette della foto
   if (hsl.l < 0.1 || hsl.s < 0.05) {
-    return c.setHSL(0.045, 0.68, 0.72);
+    return c.setHSL(0.045, 0.82, 0.56);
   }
-  const s = THREE.MathUtils.clamp(hsl.s * 0.92 + 0.38, 0.68, 0.94);
-  const l = THREE.MathUtils.clamp(0.7 + (hsl.l - 0.5) * 0.07, 0.66, 0.75);
+  const s = THREE.MathUtils.clamp(hsl.s * 0.92 + 0.42, 0.78, 0.96);
+  const l = THREE.MathUtils.clamp(0.56 + (hsl.l - 0.5) * 0.05, 0.52, 0.62);
   return c.setHSL(hsl.h, s, l);
 }
 
 const PRIZE_COLORS = [...CAPSULE_PALETTE];
 
 const halfLower = (r: number) =>
-  new THREE.SphereGeometry(r, 40, 24, 0, TAU, Math.PI / 2, Math.PI / 2);
+  new THREE.SphereGeometry(r, 36, 22, 0, TAU, Math.PI / 2, Math.PI / 2);
 const halfUpper = (r: number) =>
-  new THREE.SphereGeometry(r * 0.999, 40, 24, 0, TAU, 0, Math.PI / 2);
+  new THREE.SphereGeometry(r * 0.999, 36, 22, 0, TAU, 0, Math.PI / 2);
 
 /** plastica pastello opaca, con un velo di clearcoat (non uno specchio) */
 function shellMaterial() {
@@ -67,10 +67,10 @@ function shellMaterial() {
  * e la trasmissione di three sfoca quello che sta dietro. Il trucco è
  * trasparenza bassa + riflessi d'ambiente forti + clearcoat: la sfera legge
  * come guscio sottile e lucido, e il premio resta perfettamente a fuoco.
- * L'alpha è modulato in Fresnel: quasi invisibile al centro (il giocattolo
- * resta nitido), corposo e riflettente sul bordo, dove si vede lo spessore
- * della plastica. DoubleSide aggiunge la parete interna e il riflesso di
- * taglio: spessore da vera calotta stampata, non da bolla di sapone.
+ * L'alpha è modulato in Fresnel: limpido al centro (il giocattolo resta
+ * nitido), corposo e riflettente sul bordo, dove si vede lo spessore della
+ * plastica. DoubleSide aggiunge la parete interna e il riflesso di taglio:
+ * spessore da vera calotta stampata, non da bolla di sapone.
  */
 function glassMaterial() {
   const m = new THREE.MeshPhysicalMaterial({
@@ -93,12 +93,14 @@ function glassMaterial() {
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <normal_fragment_maps>',
       `#include <normal_fragment_maps>
-       float glassFresnel = pow(1.0 - saturate(abs(dot(normal, normalize(vViewPosition)))), 1.7);
+       float glassFresnel = pow(1.0 - saturate(abs(dot(normal, normalize(vViewPosition)))), 0.85);
        // centro limpido ma non invisibile, bordo spesso e lucido
-       diffuseColor.a = mix(opacity * 0.5, opacity * 3.8, glassFresnel);`
+       diffuseColor.a = mix(opacity * 1.35, opacity * 5.0, glassFresnel);`
     );
   };
-  m.customProgramCacheKey = () => 'capsule-glass-fresnel-v3';
+  // DoubleSide senza il secondo pass: una sola draw call per calotta
+  m.forceSinglePass = true;
+  m.customProgramCacheKey = () => 'capsule-glass-fresnel-v4';
   return m;
 }
 
@@ -130,13 +132,13 @@ function ringBumpTexture() {
  */
 function ringGeometry(r: number) {
   // toro schiacciato: fascia stampata, non un tubo da idraulico
-  const torus = new THREE.TorusGeometry(r * 0.994, r * 0.03, 12, 72);
+  const torus = new THREE.TorusGeometry(r * 0.994, r * 0.03, 9, 56);
   torus.rotateX(Math.PI / 2);
   torus.scale(1, 0.55, 1);
 
   // linguetta sul fianco, dove si pinza per aprire la capsula
   const ang = 0.58;
-  const tab = new RoundedBoxGeometry(r * 0.105, r * 0.048, r * 0.14, 3, r * 0.017);
+  const tab = new RoundedBoxGeometry(r * 0.16, r * 0.06, r * 0.15, 2, r * 0.02);
   tab.rotateY(-ang);
   tab.translate(Math.cos(ang) * r, 0, Math.sin(ang) * r);
 
@@ -216,27 +218,9 @@ function bandColor(hex: string): THREE.Color {
   return c.setHSL(hsl.h, s, l);
 }
 
-/** divide il titolo in una o due righe bilanciate, senza spezzare parole */
-function titleLines(title: string): string[] {
-  const words = title.split(/\s+/).filter(Boolean);
-  if (words.length < 2 || title.length <= 11) return [title];
-  let best = [title];
-  let bestMax = Infinity;
-  for (let i = 1; i < words.length; i++) {
-    const a = words.slice(0, i).join(' ');
-    const b = words.slice(i).join(' ');
-    const m = Math.max(a.length, b.length);
-    if (m < bestMax) {
-      bestMax = m;
-      best = [a, b];
-    }
-  }
-  return best;
-}
-
 function labelTexture(title: string, color: string) {
   const W = 512;
-  const H = 227;
+  const H = 182;
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
@@ -263,41 +247,23 @@ function labelTexture(title: string, color: string) {
   g.strokeStyle = 'rgba(0,0,0,0.13)';
   g.lineWidth = 2;
   g.beginPath();
-  g.roundRect(10, 10, W - 20, H - 20, 10);
+  g.roundRect(9, 9, W - 18, H - 18, 9);
   g.stroke();
 
-  g.fillStyle = 'rgba(255,255,255,0.94)';
-  g.textBaseline = 'middle';
-  g.textAlign = 'left';
-  g.letterSpacing = '1.4px';
-  g.font = '800 13px "Helvetica Neue", Arial, sans-serif';
-  g.fillText('DAVIDE.FYI', 26, 25);
-  g.textAlign = 'right';
-  g.font = '800 12px "Helvetica Neue", Arial, sans-serif';
-  g.fillText('PRIZE', W - 26, 25);
-  g.letterSpacing = '0px';
-
-  g.strokeStyle = 'rgba(255,255,255,0.3)';
-  g.lineWidth = 1.5;
-  g.beginPath();
-  g.moveTo(26, 38);
-  g.lineTo(W - 26, 38);
-  g.stroke();
-
-  // nome progetto: bianco, grande, condensato solo quanto serve
-  const lines = titleLines(title.toUpperCase());
-  const areaTop = 45;
-  const areaH = 148;
-  const maxW = W - 48;
-  const start =
-    lines.length === 1 ? 142 : Math.min(92, Math.floor((areaH - 6) / lines.length / 1.01));
-  let size = start;
+  // nome progetto: bianco, grande, una riga sola che si adatta alla banda
+  const lines = [title.toUpperCase()];
+  const areaTop = 8;
+  const areaH = 128;
+  const maxW = W - 44;
+  let size = 120;
   let sx = 1;
+  const nameFont = (px: number) =>
+    `900 ${px}px "HelveticaNeue-CondensedBlack", "Helvetica Neue Condensed Black", "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
   for (;;) {
-    g.font = `900 ${size}px "Helvetica Neue", "Arial Black", Arial, sans-serif`;
+    g.font = nameFont(size);
     const widest = Math.max(...lines.map((l) => g.measureText(l).width));
     sx = Math.min(1, maxW / widest);
-    if (sx >= 0.78 || size <= 30) break;
+    if (sx >= 0.76 || size <= 30) break;
     size -= 2;
   }
   const lineH = size * 1.01;
@@ -306,11 +272,14 @@ function labelTexture(title: string, color: string) {
 
   g.save();
   g.beginPath();
-  g.rect(18, areaTop - 4, W - 36, areaH + 8);
+  g.rect(16, areaTop - 4, W - 32, areaH + 8);
   g.clip();
   g.fillStyle = '#ffffff';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
+  g.lineJoin = 'round';
+  g.strokeStyle = 'rgba(0,0,0,0.3)';
+  g.lineWidth = Math.max(2, size * 0.035);
   g.shadowColor = 'rgba(0,0,0,0.22)';
   g.shadowBlur = 5;
   g.shadowOffsetY = 2;
@@ -318,17 +287,18 @@ function labelTexture(title: string, color: string) {
     g.save();
     g.translate(W / 2, firstY + i * lineH);
     g.scale(sx, 1);
+    g.strokeText(line, 0, 0);
     g.fillText(line, 0, 0);
     g.restore();
   });
   g.restore();
 
-  // riga di servizio in basso
-  g.fillStyle = 'rgba(255,255,255,0.8)';
+  // riga di servizio in basso, fuori dalla zona più visibile
+  g.fillStyle = 'rgba(255,255,255,0.78)';
   g.textAlign = 'center';
   g.letterSpacing = '2.4px';
   g.font = '800 10px "Helvetica Neue", Arial, sans-serif';
-  g.fillText('COLLECTIBLE CAPSULE', W / 2, 209);
+  g.fillText('DAVIDE.FYI  ·  PRIZE', W / 2, 168);
   g.letterSpacing = '0px';
 
   const tex = new THREE.CanvasTexture(c);
@@ -350,19 +320,22 @@ function mulberryLike(seed: number) {
 }
 
 /**
- * Adesivo curvo sulla calotta inferiore (solo lì: la cupola trasparente
+ * Etichetta adesiva sulla calotta inferiore (solo lì: la cupola trasparente
  * resta libera, così il premio si vede).
- * Centrato su +z (camera di default), patch largo ~96°, alto ~40°.
+ * Un pannello largo ~120°, montato su un pivot che ruota solo attorno all'asse
+ * verticale della capsula per guardare la camera: il nome resta sempre di
+ * fronte, anche dopo che la fisica ha fatto rotolare la capsula.
+ * Alto ~40°, quindi non invade la cupola.
  */
-const LABEL_PHI = 1.68;
+const LABEL_PHI = TAU / 3;
 const LABEL_THETA_START = Math.PI / 2 + 0.02;
 const LABEL_THETA = 0.7;
 
 function labelGeometry(r: number) {
   return new THREE.SphereGeometry(
     r * 1.006,
-    52,
-    26,
+    40,
+    20,
     Math.PI / 2 - LABEL_PHI / 2,
     LABEL_PHI,
     LABEL_THETA_START,
@@ -379,6 +352,10 @@ function labelMaterial(tex: THREE.Texture) {
     clearcoatRoughness: 0.42,
     envMapIntensity: 0.65,
     side: THREE.FrontSide,
+    // transparent (opacity 1) fa saltare il mergeStatic dei premi:
+    // l'etichetta deve restare una mesh viva per girarsi verso la camera.
+    transparent: true,
+    opacity: 1,
     polygonOffset: true,
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
@@ -483,12 +460,17 @@ export function makeCapsule(opts: CapsuleOptions): THREE.Group {
     const tex = labelTexture(project.title, project.color);
     const mat = labelMaterial(tex);
     const geo = labelGeometry(r);
-    const front = new THREE.Mesh(geo, mat);
-    g.add(front);
-    // seconda etichetta sul lato opposto: si legge anche dopo un mezzo giro
-    const back = new THREE.Mesh(geo, mat);
-    back.rotation.y = Math.PI;
-    g.add(back);
+    const label = new THREE.Mesh(geo, mat);
+    // niente merge: questo pannello deve poter ruotare da solo verso la camera
+    label.userData.noMerge = true;
+    label.onBeforeRender = (_renderer, _scene, camera) => {
+      const capsule = label.parent;
+      if (!capsule) return;
+      const local = capsule.worldToLocal(camera.position.clone());
+      label.rotation.y = Math.atan2(local.x, local.z);
+      label.updateMatrixWorld(true);
+    };
+    g.add(label);
   }
 
   g.userData.projectId = project?.id ?? null;

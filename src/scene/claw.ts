@@ -83,15 +83,16 @@ const M = {
   swayLoadGain: 0.21,
   swayLoadLimit: 0.042,
   headLever: 0.3,
-  tiltGain: 0.9,
-  leanGain: 0.05,
-  leanLimit: 0.032,
+  tiltGain: 0.6,
+  leanGain: 0.045,
+  leanLimit: 0.024,
   leanOmega: 5.5,
   // dita: molla sottosmorzata + ritardo meccanico per dito
   gripOmega: 26,
   gripZeta: 0.42,
   gripLimit: 0.06,
-  gripRate: 2.4,
+  gripRate: 2.0,
+  gripSnap: 1.1,
   fingerDelay: 0.04,
 };
 
@@ -161,6 +162,7 @@ export class Claw {
   /** apertura visuale di ogni dito: 1 aperto, 0 chiuso (puo' superare i limiti) */
   private fingerG = [1, 1, 1];
   private fingerV = [0, 0, 0];
+  private fingerSnap = [false, false, false];
   private gripCmd = 1;
   private gripHist: { t: number; v: number }[] = [];
   private leanX = 0;
@@ -641,6 +643,14 @@ export class Claw {
       const target = this.gripAt(this.clock - i * M.fingerDelay);
       let g = this.fingerG[i];
       let v = this.fingerV[i];
+
+      // scatto meccanico: la molla supera la chiusura e torna, dito per dito
+      if (!this.fingerSnap[i] && target < 0.02 && g > 0.02) {
+        v -= M.gripSnap;
+        this.fingerSnap[i] = true;
+      } else if (target > 0.35) {
+        this.fingerSnap[i] = false;
+      }
       for (let s = 0; s < steps; s++) {
         const acc = M.gripOmega * M.gripOmega * (target - g) - 2 * M.gripZeta * M.gripOmega * v;
         v += acc * h;
@@ -658,16 +668,18 @@ export class Claw {
     }
   }
 
-  /** valore del comando di presa `delay` secondi fa (ritardo per dito) */
+  /** valore del comando di presa `delay` secondi fa (interpolato, ritardo per dito) */
   private gripAt(t: number) {
     const hist = this.gripHist;
     if (!hist.length) return this.grip;
-    let v = hist[0].v;
-    for (const s of hist) {
-      if (s.t > t) break;
-      v = s.v;
+    if (t <= hist[0].t) return hist[0].v;
+    for (let i = 0; i < hist.length - 1; i++) {
+      if (t <= hist[i + 1].t) {
+        const span = Math.max(1e-6, hist[i + 1].t - hist[i].t);
+        return hist[i].v + (hist[i + 1].v - hist[i].v) * ((t - hist[i].t) / span);
+      }
     }
-    return v;
+    return hist[hist.length - 1].v;
   }
 
   // ─── trasformazioni ───────────────────────────────────────────────────────
@@ -683,8 +695,9 @@ export class Claw {
     this.head.rotation.z = this.swX * M.tiltGain + this.leanZ;
     this.head.rotation.x = -this.swZ * M.tiltGain + this.leanX;
 
-    // la fisica della presa resta sulla posizione comandata: solo l'aspetto si muove
-    this.body.setNextKinematicTranslation({ x: this.pos.x, y: this.height, z: this.pos.y });
+    // il corpo cinematico segue la testa visuale: il premio trattenuto dal joint
+    // resta agganciato alle chele anche quando il claw ondeggia
+    this.body.setNextKinematicTranslation({ x: headX, y: this.hVis, z: headZ });
 
     for (let i = 0; i < this.fingers.length; i++) {
       const g = this.fingerG[i];
@@ -726,6 +739,8 @@ export class Claw {
       yVis: this.hVis,
       open: (this.fingerG[0] + this.fingerG[1] + this.fingerG[2]) / 3,
       f: [this.fingerG[0], this.fingerG[1], this.fingerG[2]],
+      x: this.pos.x,
+      z: this.pos.y,
       swayX: Math.sin(this.swX) * lever,
       swayZ: Math.sin(this.swZ) * lever,
       tiltX: this.head.rotation.x,

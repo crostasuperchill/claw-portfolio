@@ -68,7 +68,7 @@ async function waitForServer(url, timeoutMs = 30_000, child = null) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {
     if (child && child.exitCode !== null) {
-      throw new Error(`dev server uscito con codice ${child.exitCode}`);
+      throw new Error(`server uscito con codice ${child.exitCode}`);
     }
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(1500) });
@@ -78,7 +78,7 @@ async function waitForServer(url, timeoutMs = 30_000, child = null) {
     }
     await new Promise((r) => setTimeout(r, 250));
   }
-  throw new Error(`dev server non raggiungibile entro ${timeoutMs} ms: ${url}`);
+  throw new Error(`server non raggiungibile entro ${timeoutMs} ms: ${url}`);
 }
 
 async function ensureServer() {
@@ -101,33 +101,39 @@ async function ensureServer() {
   }
 
   const port = await freePort();
-  const url = `http://127.0.0.1:${port}/`;
-  const child = spawn(
-    process.execPath,
-    [path.join(ROOT, 'node_modules/vite/bin/vite.js'), 'preview', '--host', '127.0.0.1', '--port', String(port), '--strictPort'],
-    { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] }
-  );
-  let out = '';
-  child.stdout.on('data', (d) => (out += d.toString()));
-  child.stderr.on('data', (d) => (out += d.toString()));
-  try {
-    await waitForServer(url, 30_000, child);
-  } catch (err) {
-    child.kill('SIGTERM');
-    console.error(out.slice(-2000));
-    throw err;
-  }
-  if (process.env.DEBUG === '1') {
-    child.stdout.on('data', (d) => process.stderr.write(`[vite] ${d}`));
-    child.stderr.on('data', (d) => process.stderr.write(`[vite] ${d}`));
-  }
-  log(`preview: ${url}`);
-  return {
-    url,
-    stop: () => {
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const url = `http://127.0.0.1:${port + attempt}/`;
+    const child = spawn(
+      process.execPath,
+      [path.join(ROOT, 'node_modules/vite/bin/vite.js'), 'preview', '--host', '127.0.0.1', '--port', String(port + attempt), '--strictPort'],
+      { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] }
+    );
+    let out = '';
+    child.stdout.on('data', (d) => (out += d.toString()));
+    child.stderr.on('data', (d) => (out += d.toString()));
+    try {
+      await waitForServer(url, 45_000, child);
+    } catch (err) {
+      lastError = err;
       child.kill('SIGTERM');
-    },
-  };
+      if (attempt < 2) continue;
+      console.error(out.slice(-2000));
+      throw err;
+    }
+    if (process.env.DEBUG === '1') {
+      child.stdout.on('data', (d) => process.stderr.write(`[vite] ${d}`));
+      child.stderr.on('data', (d) => process.stderr.write(`[vite] ${d}`));
+    }
+    log(`preview: ${url}`);
+    return {
+      url,
+      stop: () => {
+        child.kill('SIGTERM');
+      },
+    };
+  }
+  throw lastError ?? new Error('preview non avviata');
 }
 
 async function main() {

@@ -26,6 +26,11 @@ const CAPSULE_FRICTION = 0.55;
 const CAPSULE_RESTITUTION = 0.12;
 const CAPSULE_LINEAR_DAMPING = 0.35;
 const CAPSULE_ANGULAR_DAMPING = 0.55;
+/**
+ * Il contact skin sta solo sulle capsule: 2 mm di tolleranza contro la
+ * compenetrazione. Se lo mettessi anche sul pavimento le due skin si
+ * sommerebbero e la pila "galleggerebbe" 4 mm sopra il piano.
+ */
 const CONTACT_SKIN = 0.002;
 
 const FLOOR_FRICTION = 0.55;
@@ -294,8 +299,7 @@ export function addPlayfield(world: RAPIER.World, w: number, d: number, y: numbe
     world.createCollider(
       RAPIER.ColliderDesc.cuboid(hx, 0.01, hz)
         .setFriction(FLOOR_FRICTION)
-        .setRestitution(FLOOR_RESTITUTION)
-        .setContactSkin(CONTACT_SKIN),
+        .setRestitution(FLOOR_RESTITUTION),
       b
     );
   };
@@ -323,8 +327,7 @@ export function addPlayfield(world: RAPIER.World, w: number, d: number, y: numbe
     world.createCollider(
       RAPIER.ColliderDesc.cuboid(hx, 0.045, hz)
         .setFriction(CAPSULE_FRICTION)
-        .setRestitution(FLOOR_RESTITUTION)
-        .setContactSkin(CONTACT_SKIN),
+        .setRestitution(FLOOR_RESTITUTION),
       b
     );
   };
@@ -345,8 +348,7 @@ export function addPlayfield(world: RAPIER.World, w: number, d: number, y: numbe
   world.createCollider(
     RAPIER.ColliderDesc.cuboid(gapW / 2, 0.01, gapD / 2)
       .setFriction(CHUTE_FRICTION)
-      .setRestitution(CHUTE_RESTITUTION)
-      .setContactSkin(CONTACT_SKIN),
+      .setRestitution(CHUTE_RESTITUTION),
     bottom
   );
 

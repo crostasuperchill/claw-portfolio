@@ -68,18 +68,11 @@ function roundRect(
   g.roundRect(x, y, w, h, r);
 }
 
-/** Dark ink on light prints, warm white ink on saturated prints. */
-function inkOn(color: string) {
-  const c = new THREE.Color(color);
-  const l = 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
-  return l > 0.56 ? '#2b2233' : '#fffdf7';
-}
-
 /* ------------------------------------------------------------------ */
 /* printed face                                                        */
 /* ------------------------------------------------------------------ */
 
-function faceTexture(label: CharmLabel, index: number) {
+function faceTexture(label: CharmLabel, index: number, ink: string) {
   const W = 304;
   const H = 380;
   return canvasTex(W, H, (g) => {
@@ -116,7 +109,6 @@ function faceTexture(label: CharmLabel, index: number) {
     g.fillStyle = gloss;
     g.fillRect(0, 0, W, H);
 
-    const ink = inkOn(label.color);
     g.strokeStyle = ink;
     g.fillStyle = ink;
     g.lineWidth = 17;
@@ -273,9 +265,15 @@ function tagTexture(text: string, color: string) {
     g.fillStyle = color;
     roundRect(g, 18, 26, 9, H - 52, 4);
     g.fill();
+    g.fillStyle = '#f1e8d7';
     g.beginPath();
     g.arc(48, 38, 7, 0, TAU);
     g.fill();
+    g.strokeStyle = '#c8bca6';
+    g.lineWidth = 2.5;
+    g.beginPath();
+    g.arc(48, 38, 7, 0, TAU);
+    g.stroke();
 
     const label = text.toUpperCase();
     let size = 92;
@@ -371,6 +369,13 @@ export function buildCharms(opts: CharmsOptions): Charms {
 
   const pivots: THREE.Group[] = [];
   const n = Math.max(1, labels.length);
+  /** one ink for the whole row, so all four icons share the same print colour */
+  const rowLum =
+    labels.reduce((sum, l) => {
+      const c = new THREE.Color(l.color);
+      return sum + 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+    }, 0) / n;
+  const rowInk = rowLum > 0.56 ? '#2b2233' : '#fffdf7';
   /**
    * Slot pattern in -1..1. With four charms the two middle ones step aside
    * for the claw, which parks at x=0.
@@ -386,7 +391,7 @@ export function buildCharms(opts: CharmsOptions): Charms {
 
   /** deterministic, slightly uneven hand-hung rhythm */
   const jitter = [-0.006, 0.005, -0.004, 0.007, 0.003, -0.005];
-  const chainLens = [0.078, 0.094, 0.082, 0.098, 0.088, 0.086];
+  const chainLens = [0.086, 0.094, 0.088, 0.092, 0.09, 0.088];
 
   labels.forEach((label, i) => {
     const pivot = new THREE.Group();
@@ -444,7 +449,7 @@ export function buildCharms(opts: CharmsOptions): Charms {
     const face = new THREE.Mesh(
       new THREE.PlaneGeometry(discW, discH),
       new THREE.MeshPhysicalMaterial({
-        map: faceTexture(label, i),
+        map: faceTexture(label, i, rowInk),
         roughness: 0.24,
         metalness: 0,
         clearcoat: 1,

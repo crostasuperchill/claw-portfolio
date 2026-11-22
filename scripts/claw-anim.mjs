@@ -51,6 +51,22 @@ const browser = await chromium.launch({
 });
 const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
 const page = await ctx.newPage();
+
+// pausa/ripresa del loop rAF: la cattura del canvas e' lenta su macchina carica,
+// cosi' il fotogramma resta esattamente al momento voluto
+await page.addInitScript(() => {
+  const orig = window.requestAnimationFrame.bind(window);
+  const queue = [];
+  let frozen = false;
+  window.__rafFreeze = (on) => {
+    frozen = !!on;
+    if (!frozen) {
+      const cbs = queue.splice(0);
+      for (const cb of cbs) orig(cb);
+    }
+  };
+  window.requestAnimationFrame = (cb) => (frozen ? (queue.push(cb), 0) : orig(cb));
+});
 const logs = [];
 let envKind = null;
 page.on('console', (m) => {
@@ -122,6 +138,9 @@ const startSampler = () =>
     let next = 0;
     let phase = null;
     let phaseT = 0;
+    const cross = [null, null, null];
+    let prevF = null;
+    let prevSim = 0;
     const tick = (now) => {
       const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
       last = now;
@@ -135,8 +154,25 @@ const startSampler = () =>
         phaseT += dt;
       }
       window.__animProg = { phase, t: +phaseT.toFixed(3), sim: +sim.toFixed(3), done: false };
+      const arm = window.__clawArm?.();
+      if (arm?.f) {
+        for (let k = 0; k < 3; k++) {
+          if (cross[k] !== null) continue;
+          if (arm.f[k] < 0.97) {
+            // interpolazione sub-frame sull'attraversamento di 0.97
+            if (prevF && prevF[k] >= 0.97) {
+              const w = (prevF[k] - 0.97) / Math.max(1e-6, prevF[k] - arm.f[k]);
+              cross[k] = +(prevSim + (sim - prevSim) * w).toFixed(4);
+            } else {
+              cross[k] = +sim.toFixed(4);
+            }
+          }
+        }
+        window.__animCross = cross;
+        prevF = [arm.f[0], arm.f[1], arm.f[2]];
+        prevSim = sim;
+      }
       if (sim >= next) {
-        const arm = window.__clawArm?.();
         let y = arm?.yVis;
         let open = arm?.open ?? null;
         let fingers = arm?.f ?? null;
@@ -148,6 +184,8 @@ const startSampler = () =>
           t: +sim.toFixed(4),
           phase: st,
           y: +Number(y).toFixed(5),
+          x: arm ? +Number(arm.x ?? 0).toFixed(5) : null,
+          z: arm ? +Number(arm.z ?? 0).toFixed(5) : null,
           open: open === null ? null : +open.toFixed(4),
           f: fingers ? fingers.map((v) => +v.toFixed(4)) : null,
           sway: arm ? +Math.hypot(arm.swayX ?? 0, arm.swayZ ?? 0).toFixed(5) : null,
@@ -157,7 +195,7 @@ const startSampler = () =>
         });
         next += 0.05;
       }
-      if (sim < 40) requestAnimationFrame(tick);
+      if (sim < 120) requestAnimationFrame(tick);
       else window.__animProg.done = true;
     };
     requestAnimationFrame(tick);
@@ -183,15 +221,54 @@ const closeCard = async () => {
 };
 
 const shotPlan = [
-  { phase: 'drop', at: 0.16, name: '01-anticipation' },
-  { phase: 'drop', at: 0.9, name: '02-descent' },
-  { phase: 'close', at: 0.4, name: '03-close' },
-  { phase: 'lift', at: 0.38, name: '04-lift' },
-  { phase: 'carry', at: 0.5, name: '05-carry' },
-  { phase: 'return', at: 0.42, name: '06-return' },
+  { phase: 'drop', at: 0.16, name: '01', label: 'anticipation' },
+  { phase: 'drop', at: 0.9, name: '02', label: 'descent' },
+  { phase: 'close', at: 0.72, name: '03', label: 'close' },
+  { phase: 'lift', at: 0.38, name: '04', label: 'lift' },
+  { phase: 'carry', at: 0.5, name: '05', label: 'carry' },
+  { phase: 'return', at: 0.42, name: '06', label: 'return' },
 ].slice(0, SHOTS);
 
-// ─── ciclo misurato: nessuno screenshot, cosi' il campionamento non viene disturbato ───
+/**
+ * Aspetta la fase e cattura il canvas nello stesso task: attesa, freeze e
+ * render avvengono dentro la pagina, cosi' la latenza CDP non sposta il frame.
+ */
+const captureAt = async (file, phase, at) => {
+  const data = await page.evaluate(
+    async ({ phase: ph, at: thr }) =>
+      await new Promise((resolve) => {
+        const t0 = performance.now();
+        const check = () => {
+          const p = window.__animProg;
+          if (p && p.phase === ph && p.t >= thr) {
+            try {
+              window.__rafFreeze?.(true);
+              const s = window.__studio;
+              if (!s) return resolve(null);
+              if (s.composer) s.composer.render();
+              else s.renderer.render(s.scene, s.camera);
+              const url = s.renderer.domElement.toDataURL('image/png');
+              const arm = window.__clawArm?.();
+              window.__rafFreeze?.(false);
+              resolve({ url, y: arm ? +arm.yVis.toFixed(3) : null, open: arm ? +arm.open.toFixed(2) : null, grabbed: !!arm?.grabbed });
+            } catch {
+              resolve(null);
+            }
+            return;
+          }
+          if (performance.now() - t0 > 30000) return resolve(null);
+          requestAnimationFrame(check);
+        };
+        requestAnimationFrame(check);
+      }),
+    { phase, at }
+  );
+  if (!data?.url) return null;
+  await writeFile(file, Buffer.from(data.url.split(',')[1], 'base64'));
+  return { y: data.y, open: data.open, grabbed: data.grabbed };
+};
+
+// ─── ciclo misurato: campionamento + 6 frame (con pausa durante la cattura) ──
 const aimPoint = target ? { x: target.x, z: target.z } : { x: 0.0, z: 0.09 };
 const startCycle = async () => {
   await closeCard();
@@ -203,30 +280,25 @@ const startCycle = async () => {
 
 await startSampler();
 await startCycle();
-await waitPhase('idle', 0, 25000);
-const rows = (await page.evaluate(() => window.__animSamples ?? [])).filter((r) => Number.isFinite(r.y));
-await page.evaluate(() => {
-  window.__animProg.done = true;
-});
 
-// ─── 6 frame: un ciclo per frame, catturato alla fase voluta ─────────────────
 const frames = [];
-if (rows.length) {
-  for (const shot of shotPlan) {
-    await startCycle();
-    const ok = await waitPhase(shot.phase, shot.at);
-    if (!ok) {
-      console.log(`frame ${shot.name}: fase non raggiunta`);
-    } else {
-      const file = path.join(OUT, `${LABEL}-${shot.name}.png`);
-      await page.screenshot({ path: file });
-      frames.push(file);
-      console.log(`frame ${shot.name} -> ${file}`);
-    }
-    await waitPhase('idle', 0, 25000);
-    await closeCard();
+for (const shot of shotPlan) {
+  const file = path.join(OUT, `${LABEL}-${shot.name}.png`);
+  const state = await captureAt(file, shot.phase, shot.at);
+  if (!state) {
+    console.log(`frame ${shot.name}: fase ${shot.phase} non raggiunta`);
+    continue;
   }
+  frames.push({ file, phase: shot.phase, at: shot.at, label: shot.label, state });
+  console.log(
+    `frame ${shot.name} (${shot.label}, ${shot.phase}@${shot.at}s) -> ${file}  y ${state.y} open ${state.open}${
+      state.grabbed ? ' grab' : ''
+    }`
+  );
 }
+
+await waitPhase('idle', 0, 30000);
+const rows = (await page.evaluate(() => window.__animSamples ?? [])).filter((r) => Number.isFinite(r.y));
 
 if (!rows.length) {
   console.error('nessun campione raccolto');
@@ -262,6 +334,8 @@ for (let t = 0; t <= tEnd - t0 + 1e-9; t += STEP) {
     t: +t.toFixed(3),
     phase: w < 0.5 ? a.phase : b.phase,
     y: mix('y'),
+    x: mix('x'),
+    z: mix('z'),
     open: mix('open'),
     f: a.f && b.f ? a.f.map((v, k) => v + (b.f[k] - v) * w) : null,
     sway: mix('sway'),
@@ -314,18 +388,33 @@ for (let i = 1; i < grid.length; i++) {
   }
 }
 
-// sfalsamento: primo istante in cui ogni dito scende sotto 0.97 di apertura
+// sfalsamento: primo istante (sui campioni rAF, non sulla griglia) in cui ogni
+// dito scende sotto 0.97 di apertura, interpolato tra due campioni
 const crossTime = (k) => {
-  for (let i = 1; i < grid.length; i++) {
-    const a = grid[i - 1].f?.[k];
-    const b = grid[i].f?.[k];
+  for (let i = 1; i < cycle.length; i++) {
+    const a = cycle[i - 1].f?.[k];
+    const b = cycle[i].f?.[k];
     if (a === undefined || b === undefined) continue;
-    if (a >= 0.97 && b < 0.97) return grid[i - 1].t + STEP * ((a - 0.97) / Math.max(1e-6, a - b));
+    if (a >= 0.97 && b < 0.97) {
+      const span = Math.max(1e-6, cycle[i].t - cycle[i - 1].t);
+      return cycle[i - 1].t + span * ((a - 0.97) / Math.max(1e-6, a - b));
+    }
   }
   return null;
 };
-const stagger = [0, 1, 2].map((k) => crossTime(k));
+const measuredCross = (await page.evaluate(() => window.__animCross ?? [null, null, null])) || [null, null, null];
+// tempi assoluti (sim) del primo istante sotto 0.97 per dito; contano le differenze
+const stagger = [0, 1, 2].map((k) => measuredCross[k] ?? crossTime(k));
 const staggerDeltas = stagger.map((v, i) => (i && v !== null && stagger[i - 1] !== null ? +((v - stagger[i - 1]) * 1000).toFixed(0) : null));
+
+// velocita' orizzontale massima per fase (andata vs ritorno)
+const speedByPhase = {};
+for (let i = 1; i < grid.length; i++) {
+  if (!finite(grid[i].x) || !finite(grid[i - 1].x)) continue;
+  const v = Math.hypot(grid[i].x - grid[i - 1].x, grid[i].z - grid[i - 1].z) / STEP;
+  const p = grid[i].phase;
+  speedByPhase[p] = Math.max(speedByPhase[p] ?? 0, v);
+}
 
 const grabbed = grid.some((g) => g.phase === 'lift') && cycle.some((r) => r.grabbed && r.phase === 'lift');
 const fmt = (v, d = 4) => (finite(v) ? v.toFixed(d).padStart(8) : '       -');
@@ -358,6 +447,7 @@ console.log(
     .map((v) => (v === null ? '-' : `${v}ms`))
     .join(' / ')}`
 );
+console.log(`xy speed  ${Object.entries(speedByPhase).map(([p, v]) => `${p} ${v.toFixed(2)}m/s`).join('  ')}`);
 console.log(`jump>${JUMP_LIMIT}  ${jumps.length ? jumps.join(' | ') : 'nessuno'}`);
 console.log(`frames   ${frames.length}`);
 if (logs.length) console.log(`errori pagina: ${logs.slice(0, 5).join(' | ')}`);
@@ -379,6 +469,7 @@ const summary = {
   tiltMax: maxAbs(grid.map((g) => g.tilt)),
   stagger,
   staggerDeltas,
+  speedByPhase,
   jumps,
   frames,
   grid,

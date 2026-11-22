@@ -73,10 +73,10 @@ const P = {
   pink: '#ff8fbe',
   pinkDeep: '#ec4f8d',
   pinkPale: '#ffd0e2',
-  azure: '#7cc6ff',
-  azureDeep: '#3d8fdd',
+  azure: '#5ab4ff',
+  azureDeep: '#2f78c6',
   mint: '#8fe8c8',
-  yellow: '#ffd45e',
+  yellow: '#ffc933',
   yellowDeep: '#eda92e',
   lilac: '#bda6ff',
   lilacDeep: '#8c6fe0',
@@ -227,13 +227,11 @@ function floppyLabel(accent: string) {
     g.textAlign = 'center';
     g.fillText('D', 256, 212);
 
+    // chunky print block, no sub-2 mm barcode
+    g.fillStyle = accent;
+    for (let i = 0; i < 5; i++) g.fillRect(30 + i * 28, 246, 16, 34);
     g.fillStyle = '#2a2620';
-    let x = 30;
-    const bars = [8, 4, 6, 12, 4, 9, 6, 4, 12, 6, 9, 4, 6, 8, 4, 6, 9];
-    bars.forEach((w, i) => {
-      g.fillRect(x, 244, w, 36);
-      x += w + (i % 2 ? 8 : 5);
-    });
+    for (let i = 0; i < 4; i++) g.fillRect(58 + i * 28, 246, 8, 34);
   });
 }
 
@@ -346,20 +344,18 @@ function ballFace() {
 
     const ink = '#3a2c4a';
     g.fillStyle = ink;
-    // eyes: one open, one winking
+    // two big eyes
     g.beginPath();
     g.arc(92, 112, 18, 0, Math.PI * 2);
     g.fill();
-    g.lineWidth = 14;
-    g.lineCap = 'round';
     g.beginPath();
-    g.moveTo(140, 114);
-    g.lineTo(180, 104);
-    g.stroke();
+    g.arc(164, 112, 18, 0, Math.PI * 2);
+    g.fill();
     // big smile
     g.lineWidth = 16;
+    g.lineCap = 'round';
     g.beginPath();
-    g.arc(128, 140, 52, 0.14 * Math.PI, 0.86 * Math.PI);
+    g.arc(128, 138, 52, 0.14 * Math.PI, 0.86 * Math.PI);
     g.stroke();
   });
 }
@@ -451,10 +447,10 @@ function spherePatch(r: number, span = 0.9) {
 export const TOY_TOP: Record<Toy, number> = {
   pocketpet: 0.059,
   handheld: 0.056,
-  floppy: 0.043,
+  floppy: 0.048,
   charm: 0.056,
-  cartridge: 0.044,
-  ball: 0.037,
+  cartridge: 0.049,
+  ball: 0.041,
 };
 
 /* ------------------------------------------------------------------ */
@@ -578,29 +574,36 @@ export function makeToy(kind: Toy, color: string): THREE.Group {
     }
   } else if (kind === 'floppy') {
     // azure 3.5" floppy: clipped corner, chrome shutter, fat printed label
-    const w = 0.082;
+    const w = 0.088;
+    const backing = new THREE.Mesh(
+      extrude(floppyShape(w + 0.006, 0.014), 0.003, 0.0006),
+      gloss('#23619e', { roughness: 0.28 })
+    );
+    backing.position.z = -0.0032;
+    g.add(backing);
+
     const body = new THREE.Mesh(
-      extrude(floppyShape(w, 0.013), 0.007, 0.001),
-      gloss(P.azure, { roughness: 0.15 })
+      extrude(floppyShape(w, 0.014), 0.007, 0.001),
+      gloss('#3f9bf0', { roughness: 0.15 })
     );
     body.castShadow = true;
     g.add(body);
 
-    const label = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.048), printMat(floppyLabel(P.azureDeep)));
-    label.position.set(-0.002, -0.009, 0.0046);
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(0.066, 0.052), printMat(floppyLabel(P.azureDeep)));
+    label.position.set(-0.002, -0.01, 0.0046);
     g.add(label);
 
-    const shutter = new THREE.Mesh(new RoundedBoxGeometry(0.028, 0.021, 0.002, 2, 0.0014), chrome());
-    shutter.position.set(0.014, 0.026, 0.0044);
+    const shutter = new THREE.Mesh(new RoundedBoxGeometry(0.03, 0.022, 0.002, 2, 0.0014), chrome());
+    shutter.position.set(0.015, 0.03, 0.0044);
     g.add(shutter);
 
-    const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.013, 0.005), gloss(P.plum, { roughness: 0.3 }));
-    slot.position.set(0.017, 0.029, 0.0055);
+    const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.014, 0.005), gloss(P.plum, { roughness: 0.3 }));
+    slot.position.set(0.018, 0.033, 0.0055);
     g.add(slot);
 
     // write-protect notch, cut into the top-left edge
     const notch = new THREE.Mesh(new RoundedBoxGeometry(0.008, 0.008, 0.004, 2, 0.001), gloss(P.plum, { roughness: 0.3 }));
-    notch.position.set(-0.034, 0.032, 0.002);
+    notch.position.set(-0.038, 0.036, 0.002);
     g.add(notch);
   } else if (kind === 'charm') {
     // pink folder, white sheets clearly peeking out under a rounded tab
@@ -616,14 +619,14 @@ export function makeToy(kind: Toy, color: string): THREE.Group {
       new RoundedBoxGeometry(0.048, 0.07, 0.0018, 2, 0.003),
       gloss(P.cream, { roughness: 0.5 })
     );
-    sheet.position.set(0.012, 0.011, 0.0017);
+    sheet.position.set(0.012, 0.011, 0.0046);
     g.add(sheet);
 
     const sheet2 = new THREE.Mesh(
       new RoundedBoxGeometry(0.046, 0.064, 0.0016, 2, 0.003),
       gloss(P.cream, { roughness: 0.55 })
     );
-    sheet2.position.set(0.004, 0.009, 0.0006);
+    sheet2.position.set(0.004, 0.009, 0.0039);
     sheet2.rotation.z = -0.03;
     g.add(sheet2);
 
@@ -633,9 +636,28 @@ export function makeToy(kind: Toy, color: string): THREE.Group {
         new THREE.PlaneGeometry(0.032 - i * 0.008, 0.004),
         gloss('#cfc3ad', { roughness: 0.6 })
       );
-      line.position.set(0.014, 0.039 - i * 0.008, 0.0028);
+      line.position.set(0.014, 0.039 - i * 0.008, 0.0057);
       g.add(line);
     }
+
+    // folded spine along the left edge
+    const spine = new THREE.Mesh(
+      new RoundedBoxGeometry(0.005, 0.082, 0.004, 2, 0.0018),
+      gloss(P.pinkDeep, { roughness: 0.3 })
+    );
+    spine.position.set(-0.0355, -0.008, 0.0044);
+    g.add(spine);
+
+    // little white index label on the tab
+    const tabLabel = new THREE.Mesh(
+      new RoundedBoxGeometry(0.018, 0.0075, 0.0012, 2, 0.0015),
+      gloss(P.cream, { roughness: 0.5 })
+    );
+    tabLabel.position.set(-0.022, 0.044, 0.0029);
+    g.add(tabLabel);
+    const tabInk = new THREE.Mesh(new THREE.PlaneGeometry(0.012, 0.0022), gloss(P.pinkDeep, { roughness: 0.5 }));
+    tabInk.position.set(-0.022, 0.044, 0.0036);
+    g.add(tabInk);
 
     const cover = new THREE.Mesh(
       new RoundedBoxGeometry(0.066, 0.062, 0.0046, 3, 0.005),
@@ -653,8 +675,15 @@ export function makeToy(kind: Toy, color: string): THREE.Group {
     g.add(eyelet);
   } else if (kind === 'cartridge') {
     // yellow ZORA cartridge, magenta label, gold edge
+    const backing = new THREE.Mesh(
+      extrude(cartridgeShape(0.084, 0.096, 0.012), 0.003, 0.0006),
+      gloss('#c98112', { roughness: 0.28 })
+    );
+    backing.position.z = -0.0065;
+    g.add(backing);
+
     const body = new THREE.Mesh(
-      extrude(cartridgeShape(0.072, 0.084, 0.011), 0.014, 0.0014),
+      extrude(cartridgeShape(0.078, 0.09, 0.011), 0.014, 0.0014),
       gloss(P.yellow, { roughness: 0.15 })
     );
     body.castShadow = true;
@@ -662,30 +691,30 @@ export function makeToy(kind: Toy, color: string): THREE.Group {
 
     for (let i = 0; i < 3; i++) {
       const grip = new THREE.Mesh(
-        new RoundedBoxGeometry(0.034, 0.004, 0.002, 2, 0.0015),
+        new RoundedBoxGeometry(0.036, 0.004, 0.002, 2, 0.0015),
         gloss(P.yellowDeep, { roughness: 0.22 })
       );
-      grip.position.set(0, 0.032 - i * 0.0062, 0.0092);
+      grip.position.set(0, 0.036 - i * 0.0064, 0.0092);
       g.add(grip);
     }
 
-    const label = new THREE.Mesh(new THREE.PlaneGeometry(0.058, 0.054), printMat(cartLabel()));
-    label.position.set(0, 0.001, 0.0098);
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(0.062, 0.058), printMat(cartLabel()));
+    label.position.set(0, 0.002, 0.0098);
     g.add(label);
 
-    const edge = new THREE.Mesh(new THREE.PlaneGeometry(0.054, 0.011), printMat(cartEdge()));
-    edge.position.set(0, -0.0365, 0.0092);
+    const edge = new THREE.Mesh(new THREE.PlaneGeometry(0.058, 0.011), printMat(cartEdge()));
+    edge.position.set(0, -0.0385, 0.0092);
     g.add(edge);
 
     const notch = new THREE.Mesh(new RoundedBoxGeometry(0.01, 0.007, 0.002, 2, 0.001), gloss(P.yellowDeep, { roughness: 0.3 }));
-    notch.position.set(0.026, 0.036, 0.0092);
+    notch.position.set(0.028, 0.04, 0.0092);
     g.add(notch);
   } else {
-    // Oracle: glossy lilac magic ball with a big winking face
-    const r = 0.037;
+    // Oracle: glossy lilac magic ball with a big smiley face
+    const r = 0.0405;
     const ball = new THREE.Mesh(
       new THREE.SphereGeometry(r, 40, 28),
-      gloss('#b49cff', { roughness: 0.17, clearcoatRoughness: 0.05, envMapIntensity: 1.2 })
+      gloss('#a487ff', { roughness: 0.17, clearcoatRoughness: 0.05, envMapIntensity: 1.2 })
     );
     ball.castShadow = true;
     g.add(ball);

@@ -8,6 +8,7 @@ import { buildDecalAtlas } from './scene/decals';
 import { buildCabinet } from './scene/cabinet';
 import { mergeStatic } from './scene/merge';
 import { CapsuleField, makeCapsule } from './scene/capsules';
+import { buildCharms } from './scene/charms';
 import { addCapsule, addPlayfield, initPhysics } from './scene/physics';
 import { Claw } from './scene/claw';
 import { spawnLayout } from './game/layout';
@@ -86,6 +87,20 @@ async function boot() {
   const fillSpots = spots.filter((s) => !prizeSpots.includes(s));
   const field = new CapsuleField(fillSpots.length, D.capsuleR);
   studio.scene.add(field.group);
+
+  // ciondoli appesi dentro la teca, come nella reference
+  const charms = buildCharms({
+    labels: [
+      { text: 'WEB DEV', color: '#f04d95' },
+      { text: 'FRONT-END', color: '#3aa6e8' },
+      { text: 'UX/UI', color: '#8a5fe6' },
+      { text: '3D ART', color: '#43cfa0' },
+    ],
+    topY: 1.29,
+    z: -0.16,
+    halfWidth: 0.33,
+  });
+  studio.scene.add(charms.group);
   const tmpMatrix = new THREE.Matrix4();
   const tmpPos = new THREE.Vector3();
   const tmpQuat = new THREE.Quaternion();
@@ -286,6 +301,7 @@ async function boot() {
 
     claw.update(dt);
     cabinet.update(dt);
+    charms.update(performance.now() / 1000);
 
     for (const ref of refs.values()) {
       if (ref.collected) continue;
@@ -327,21 +343,21 @@ async function boot() {
     requestAnimationFrame(frame);
   }
 
-  // Il transmission di three sfoca tutto quello che sta dietro: con vetro e
-  // capsule in trasmissione l'interno della teca diventa illeggibile.
-  // Vetro "finto": trasparenza bassa + riflessi dell'ambiente, ma contenuto nitido.
+  // Il transmission di three sfoca quello che sta dietro (interno illeggibile).
+  // Lo azzeriamo, ma lasciamo a ogni materiale la sua opacità/riflessione:
+  // vetro e calotte restano lucidi, il contenuto resta nitido.
   studio.scene.traverse((o) => {
     const mesh = o as THREE.Mesh;
-    const mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as
-      | THREE.MeshPhysicalMaterial
-      | undefined;
-    if (!mat || !('transmission' in mat) || !mat.transmission) return;
-    mat.transmission = 0;
-    mat.transparent = true;
-    mat.opacity = 0.07;
-    mat.depthWrite = false;
-    mat.envMapIntensity = Math.max(mat.envMapIntensity ?? 1, 1.5);
-    mat.needsUpdate = true;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      const mat = m as THREE.MeshPhysicalMaterial | undefined;
+      if (!mat || !('transmission' in mat) || !mat.transmission) continue;
+      mat.transmission = 0;
+      mat.transparent = true;
+      mat.depthWrite = false;
+      mat.envMapIntensity = Math.max(mat.envMapIntensity ?? 1, 3.2);
+      mat.needsUpdate = true;
+    }
   });
 
   studio.renderer.compile(studio.scene, studio.camera);

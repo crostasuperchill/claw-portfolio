@@ -319,7 +319,7 @@ export const matte = (color: string) =>
     envMapIntensity: 0.4,
   });
 
-export const glow = (color: string, intensity = 1.6) =>
+export const glow = (color: string, intensity = 1.4) =>
   new THREE.MeshStandardMaterial({
     color,
     emissive: new THREE.Color(color),
@@ -368,8 +368,6 @@ export const printed = (map: THREE.Texture, opts: Partial<THREE.MeshPhysicalMate
     roughnessMap: microRoughness(),
     clearcoat: 0.55,
     clearcoatRoughness: 0.15,
-    clearcoatNormalMap: orangePeelNormal(),
-    clearcoatNormalScale: new THREE.Vector2(0.035, 0.035),
     envMapIntensity: 0.9,
     ...opts,
   });

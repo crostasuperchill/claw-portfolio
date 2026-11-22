@@ -645,7 +645,7 @@ export function bodyTexture() {
   g.textAlign = 'left';
   g.fillText('MADE IN JAPAN', 508, 492);
   g.textAlign = 'right';
-  g.fillText('UFO-1024 / 220V', 990, 492);
+  g.fillText('UFO-1024 / 100V', 990, 492);
 
   // decorative dots
   g.fillStyle = 'rgba(242,167,195,0.55)';
@@ -715,7 +715,7 @@ export function deckTexture() {
   arrow(78, 191, 'left');
   arrow(306, 191, 'right');
   arrow(192, 278, 'down');
-  arrow(192, 104, 'up');
+  arrow(192, 68, 'up');
 
   // tiny machine name on the rear edge
   g.fillStyle = 'rgba(255,255,255,0.4)';
@@ -1224,11 +1224,11 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   // satin metal that still reads bright on a vertical face: a pure metal
   // only mirrors the dark front of the HDRI and turns into a black hole
   const chromeSoft = plastic('#e9edf2', { metalness: 0.45, roughness: 0.24, clearcoat: 0.9, clearcoatRoughness: 0.1 });
-  const brushed = plastic('#c8cdd4', { metalness: 0.5, roughness: 0.38, clearcoat: 0.5, clearcoatRoughness: 0.2 });
-  const screwFace = plastic('#f2f5f8', { metalness: 0.96, roughness: 0.18, map: screwHeadTexture() });
+  const brushed = plastic('#a9b1ba', { metalness: 0.55, roughness: 0.36, clearcoat: 0.55, clearcoatRoughness: 0.18 });
+  const screwFace = plastic('#f4f7fa', { metalness: 0.35, roughness: 0.26, clearcoat: 0.9, clearcoatRoughness: 0.12, map: screwHeadTexture() });
   const darkPlate = plastic('#24262c', { metalness: 0.6, roughness: 0.42, clearcoat: 0.35 });
   const perfMat = plastic('#ffffff', { metalness: 0.5, roughness: 0.4, map: perforationTexture() });
-  const keyFace = plastic('#f4f1e8', { metalness: 0.9, roughness: 0.2, map: keyholeTexture() });
+  const keyFace = plastic('#fbf8ee', { metalness: 0.3, roughness: 0.32, clearcoat: 0.8, clearcoatRoughness: 0.15, map: keyholeTexture() });
   const ledGlass = printed(ledDisplayTexture(), {
     emissive: new THREE.Color('#ffffff'),
     emissiveMap: ledDisplayTexture(),
@@ -1309,8 +1309,8 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     // rubber pad, chrome ferrule, levelling nut, steel mounting plate
     add(root, new THREE.CylinderGeometry(0.047, 0.055, 0.022, 24), rub, x, 0.011, z);
     add(root, new THREE.CylinderGeometry(0.05, 0.05, 0.003, 24), rub, x, 0.0235, z, false);
-    add(root, new THREE.CylinderGeometry(0.046, 0.048, 0.012, 24), chromeMat, x, 0.031, z);
-    add(root, new THREE.CylinderGeometry(0.024, 0.024, 0.01, 6), chromeMat, x, 0.041, z);
+    add(root, new THREE.CylinderGeometry(0.046, 0.048, 0.012, 24), chromeSoft, x, 0.031, z);
+    add(root, new THREE.CylinderGeometry(0.024, 0.024, 0.01, 6), chromeSoft, x, 0.041, z);
     add(root, rbox(0.092, 0.007, 0.092, 0.003), brushed, x, 0.0475, z, false);
   }
 
@@ -1334,11 +1334,13 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     false
   );
 
-  // thin pink reveal around the belly panel
-  add(root, rbox(0.916, 0.012, 0.012, 0.005), pinkDeep, 0, 0.598, 0.395, false);
-  add(root, rbox(0.916, 0.012, 0.012, 0.005), pinkDeep, 0, 0.152, 0.395, false);
-  add(root, rbox(0.012, 0.452, 0.012, 0.005), pinkDeep, -0.457, 0.375, 0.395, false);
-  add(root, rbox(0.012, 0.452, 0.012, 0.005), pinkDeep, 0.457, 0.375, 0.395, false);
+  // chunky pink bezel proud of the print: the belly reads as an inset panel
+  add(root, rbox(0.92, 0.024, 0.016, 0.006), pinkDeep, 0, 0.598, 0.3955, false);
+  add(root, rbox(0.92, 0.024, 0.016, 0.006), pinkDeep, 0, 0.152, 0.3955, false);
+  add(root, rbox(0.024, 0.47, 0.016, 0.006), pinkDeep, -0.457, 0.375, 0.3955, false);
+  add(root, rbox(0.024, 0.47, 0.016, 0.006), pinkDeep, 0.457, 0.375, 0.3955, false);
+  // shadow under the base rail
+  gapH(root, 1.0, 0.004, 0, 0.0468, 0.4005);
 
   // shadow gaps where the belly moulding meets the plinth: this is what
   // breaks the shell into separate moulded panels instead of one blob
@@ -1348,11 +1350,12 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   gapV(root, 0.452, 0.006, 0.4515, 0.375, 0.3912);
   gapH(root, 1.01, 0.0045, 0, 0.1092, 0.4);
 
-  // belly panel is bolted down: four cross-head screws on the print corners
+  // bezel is screwed down: fasteners sit on the pink rails, not on the art
   for (const sx of [-1, 1]) {
     for (const sy of [-1, 1]) {
-      screwAt(root, sx * 0.431, 0.375 + sy * 0.204, 0.4008, 0.0068, 'front', sx * 0.4 + sy * 0.2);
+      screwAt(root, sx * 0.457, 0.375 + sy * 0.095, 0.4046, 0.0055, 'front', sx * 0.4);
     }
+    screwAt(root, sx * 0.3, 0.152, 0.4046, 0.0055, 'front', sx * 0.3);
   }
 
   /* ---------------- coin door + credit display ---------------- */
@@ -1363,7 +1366,7 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   const coinH = 0.155;
 
   // chrome backplate, brushed face, chrome retaining frame
-  add(root, rbox(coinW, coinH, 0.007, 0.006), chromeMat, coinX, coinY, 0.4025, false);
+  add(root, rbox(coinW, coinH, 0.007, 0.006), chromeSoft, coinX, coinY, 0.4025, false);
   add(root, rbox(coinW - 0.02, coinH - 0.02, 0.005, 0.004), brushed, coinX, coinY, 0.4064, false);
   const bez = 0.014;
   for (const seg of [
@@ -1372,7 +1375,7 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     [bez, coinH - bez * 2, -coinW / 2 + bez / 2, 0],
     [bez, coinH - bez * 2, coinW / 2 - bez / 2, 0],
   ]) {
-    add(root, rbox(seg[0], seg[1], 0.011, 0.004), chromeMat, coinX + seg[2], coinY + seg[3], 0.4092, false);
+    add(root, rbox(seg[0], seg[1], 0.011, 0.004), chromeSoft, coinX + seg[2], coinY + seg[3], 0.4092, false);
   }
 
   // 3-digit red LED credit window
@@ -1395,22 +1398,22 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   ).renderOrder = 1;
 
   // coin entry: chrome block, vertical slot, insert-coin lamp
-  add(root, rbox(0.028, 0.056, 0.009, 0.005), chromeMat, coinX + 0.048, 0.336, 0.4105, false);
+  add(root, rbox(0.028, 0.056, 0.009, 0.005), chromeSoft, coinX + 0.048, 0.336, 0.4105, false);
   add(root, new THREE.PlaneGeometry(0.005, 0.034), matte('#050407'), coinX + 0.048, 0.336, 0.4153, false);
   add(root, new THREE.PlaneGeometry(0.0016, 0.032), matte('#241018'), coinX + 0.048, 0.336, 0.4157, false);
   add(root, new THREE.CylinderGeometry(0.0042, 0.0042, 0.003, 12), glow('#6dffa8', 1.8), coinX + 0.048, 0.372, 0.415, false).rotation.x = Math.PI / 2;
 
   // key lock (cam lock on the coin door)
-  add(root, new THREE.CylinderGeometry(0.018, 0.018, 0.008, 20), chromeMat, coinX + 0.048, 0.283, 0.4102, false).rotation.x = Math.PI / 2;
-  add(root, new THREE.CircleGeometry(0.0145, 20), keyFace, coinX + 0.048, 0.283, 0.4148, false);
+  add(root, new THREE.CylinderGeometry(0.016, 0.016, 0.008, 20), chromeSoft, coinX + 0.048, 0.283, 0.4102, false).rotation.x = Math.PI / 2;
+  add(root, new THREE.CircleGeometry(0.013, 20), keyFace, coinX + 0.048, 0.283, 0.4148, false);
 
   // coin return button + its bezel
-  add(root, new THREE.CylinderGeometry(0.0125, 0.0135, 0.008, 18), chromeMat, coinX - 0.045, 0.253, 0.4095, false).rotation.x = Math.PI / 2;
+  add(root, new THREE.CylinderGeometry(0.0125, 0.0135, 0.008, 18), chromeSoft, coinX - 0.045, 0.253, 0.4095, false).rotation.x = Math.PI / 2;
   add(root, new THREE.CylinderGeometry(0.0085, 0.0095, 0.009, 16), plastic(CAB.red, { roughness: 0.4 }), coinX - 0.045, 0.253, 0.413, false).rotation.x = Math.PI / 2;
 
   // coin return cup below the door
-  add(root, rbox(0.076, 0.038, 0.012, 0.007), chromeMat, coinX - 0.012, 0.199, 0.4018, false);
-  add(root, rbox(0.058, 0.022, 0.004, 0.006), matte('#0a080b'), coinX - 0.012, 0.199, 0.409, false);
+  add(root, rbox(0.076, 0.038, 0.012, 0.007), chromeSoft, coinX, 0.199, 0.4018, false);
+  add(root, rbox(0.058, 0.022, 0.004, 0.006), matte('#0a080b'), coinX, 0.199, 0.409, false);
 
   // coin door fixings
   for (const sx of [-1, 1]) {
@@ -1424,9 +1427,9 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   for (const sx of [-1, 1]) {
     const vx = sx * 0.335;
     add(root, rbox(0.165, 0.05, 0.004, 0.005), brushed, vx, 0.076, 0.3975, false);
-    add(root, rbox(0.148, 0.036, 0.003, 0.004), matte('#090709'), vx, 0.076, 0.3995, false);
+    add(root, rbox(0.148, 0.036, 0.003, 0.004), matte('#050406'), vx, 0.076, 0.3995, false);
     for (let i = 0; i < 4; i++) {
-      add(root, rbox(0.138, 0.0042, 0.003, 0.0018), brushed, vx, 0.076 + (i - 1.5) * 0.0082, 0.4008, false);
+      add(root, rbox(0.138, 0.0042, 0.003, 0.0018), chromeSoft, vx, 0.076 + (i - 1.5) * 0.0082, 0.4008, false);
     }
   }
 
@@ -1439,7 +1442,7 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     const disc = new THREE.Mesh(new THREE.CircleGeometry(0.062, 36), perfMat);
     disc.receiveShadow = true;
     grp.add(disc);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0635, 0.0052, 6, 36), chromeMat);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0635, 0.0052, 6, 36), chromeSoft);
     grp.add(ring);
     for (let i = 0; i < 4; i++) {
       const a = Math.PI * 0.25 + i * (Math.PI / 2);
@@ -1467,7 +1470,7 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   const recZ = 0.4006;
   add(root, new THREE.PlaneGeometry(doorW - 0.035, doorH - 0.035), new THREE.MeshBasicMaterial({ color: '#0b0609' }), doorX, doorY, recZ, false);
   const recMat = new THREE.MeshBasicMaterial({ color: '#120a10', side: THREE.DoubleSide });
-  const recD = 0.008;
+  const recD = 0.012;
   for (const [w, h, x, y, rx] of [
     [doorW - 0.035, recD, doorX, doorY + (doorH - 0.035) / 2, -Math.PI / 2],
     [doorW - 0.035, recD, doorX, doorY - (doorH - 0.035) / 2, Math.PI / 2],
@@ -1494,15 +1497,15 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     root,
     new THREE.PlaneGeometry(doorW - 0.055, doorH - 0.06),
     new THREE.MeshPhysicalMaterial({
-      color: '#2c2130',
-      roughness: 0.05,
+      color: '#241b28',
+      roughness: 0.07,
       metalness: 0,
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.3,
       clearcoat: 1,
       clearcoatRoughness: 0.03,
       side: THREE.DoubleSide,
-      envMapIntensity: 1.4,
+      envMapIntensity: 0.7,
       depthWrite: false,
     }),
     doorX,
@@ -1514,10 +1517,10 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
 
   // chunky pink frame
   const bar = 0.024;
-  add(root, rbox(bar, doorH + bar, 0.02, 0.008), pinkDeep, doorX - doorW / 2, doorY, 0.408);
-  add(root, rbox(bar, doorH + bar, 0.02, 0.008), pinkDeep, doorX + doorW / 2, doorY, 0.408);
-  add(root, rbox(doorW + bar, bar, 0.02, 0.008), pinkDeep, doorX, doorY + doorH / 2, 0.408);
-  add(root, rbox(doorW + bar, bar, 0.02, 0.008), pinkDeep, doorX, doorY - doorH / 2, 0.408);
+  add(root, rbox(bar, doorH + bar, 0.024, 0.008), pinkDeep, doorX - doorW / 2, doorY, 0.412);
+  add(root, rbox(bar, doorH + bar, 0.024, 0.008), pinkDeep, doorX + doorW / 2, doorY, 0.412);
+  add(root, rbox(doorW + bar, bar, 0.024, 0.008), pinkDeep, doorX, doorY + doorH / 2, 0.412);
+  add(root, rbox(doorW + bar, bar, 0.024, 0.008), pinkDeep, doorX, doorY - doorH / 2, 0.412);
 
   // chrome retainer lip around the prize opening
   for (const [w, h, dx, dy] of [
@@ -1526,45 +1529,45 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     [0.007, doorH - 0.035, -(doorW - 0.035) / 2, 0],
     [0.007, doorH - 0.035, (doorW - 0.035) / 2, 0],
   ]) {
-    add(root, rbox(w, h, 0.007, 0.0025), chromeMat, doorX + dx, doorY + dy, 0.4205, false);
+    add(root, rbox(w, h, 0.007, 0.0025), chromeMat, doorX + dx, doorY + dy, 0.4245, false);
   }
 
   // two hinge leaves with knuckles and screws, proud of the frame
   for (const s of [-1, 1]) {
     const hx = doorX + s * 0.085;
-    add(root, rbox(0.036, 0.016, 0.006, 0.003), chromeMat, hx, doorY + doorH / 2 + 0.012, 0.4215, false);
-    add(root, rbox(0.03, 0.014, 0.006, 0.003), chromeMat, hx, doorY + doorH / 2 - 0.012, 0.4215, false);
-    add(root, new THREE.CylinderGeometry(0.0062, 0.0062, 0.038, 12), chromeMat, hx, doorY + doorH / 2 + 0.002, 0.4275, false).rotation.z = Math.PI / 2;
-    screwAt(root, hx, doorY + doorH / 2 + 0.012, 0.4252, 0.0046);
-    screwAt(root, hx, doorY + doorH / 2 - 0.012, 0.4252, 0.0046);
+    add(root, rbox(0.042, 0.018, 0.008, 0.003), chromeMat, hx, doorY + doorH / 2 + 0.012, 0.4295, false);
+    add(root, rbox(0.036, 0.016, 0.008, 0.003), chromeMat, hx, doorY + doorH / 2 - 0.012, 0.4295, false);
+    add(root, new THREE.CylinderGeometry(0.0068, 0.0068, 0.042, 12), chromeMat, hx, doorY + doorH / 2 + 0.002, 0.4362, false).rotation.z = Math.PI / 2;
+    screwAt(root, hx, doorY + doorH / 2 + 0.012, 0.4342, 0.0046);
+    screwAt(root, hx, doorY + doorH / 2 - 0.012, 0.4342, 0.0046);
   }
 
   // chrome pull handle on two standoffs, mounted on the bottom frame bar
   const handleY = doorY - doorH / 2 + 0.003;
-  add(root, new THREE.CylinderGeometry(0.0045, 0.0045, 0.09, 12), chromeMat, doorX, handleY, 0.4275, false).rotation.z = Math.PI / 2;
+  add(root, new THREE.CylinderGeometry(0.0048, 0.0048, 0.096, 12), chromeMat, doorX, handleY, 0.4358, false).rotation.z = Math.PI / 2;
   for (const s of [-1, 1]) {
-    add(root, new THREE.CylinderGeometry(0.0055, 0.0055, 0.014, 10), chromeMat, doorX + s * 0.034, handleY, 0.4205, false).rotation.x = Math.PI / 2;
-    add(root, new THREE.CylinderGeometry(0.0095, 0.0095, 0.002, 12), brushed, doorX + s * 0.034, handleY, 0.4215, false).rotation.x = Math.PI / 2;
+    add(root, new THREE.CylinderGeometry(0.0058, 0.0058, 0.018, 10), chromeMat, doorX + s * 0.036, handleY, 0.4285, false).rotation.x = Math.PI / 2;
+    add(root, new THREE.CylinderGeometry(0.0098, 0.0098, 0.002, 12), brushed, doorX + s * 0.036, handleY, 0.4298, false).rotation.x = Math.PI / 2;
   }
 
   // small cam lock in the door frame
-  add(root, new THREE.CylinderGeometry(0.0105, 0.0105, 0.008, 16), brushed, doorX + doorW / 2, doorY - 0.03, 0.421, false).rotation.x = Math.PI / 2;
-  add(root, new THREE.CircleGeometry(0.0086, 16), keyFace, doorX + doorW / 2, doorY - 0.03, 0.4253, false);
+  add(root, new THREE.CylinderGeometry(0.011, 0.011, 0.009, 16), brushed, doorX + doorW / 2, doorY - 0.03, 0.429, false).rotation.x = Math.PI / 2;
+  add(root, new THREE.CircleGeometry(0.009, 16), keyFace, doorX + doorW / 2, doorY - 0.03, 0.4336, false);
 
-  // shadow cast into the throat
+  // faint bounce on the recess floor, kept inside the shadow box
   const doorGlow = add(
     root,
-    new THREE.PlaneGeometry(doorW - 0.06, 0.03),
+    new THREE.PlaneGeometry(doorW - 0.08, 0.016),
     new THREE.MeshBasicMaterial({
-      color: '#ffc78a',
+      color: '#c9a58f',
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.12,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }),
     doorX,
-    doorY - doorH / 2 + 0.024,
-    0.406,
+    doorY - doorH / 2 + 0.014,
+    recZ + 0.0008,
     false
   );
   doorGlow.renderOrder = 1;
@@ -1613,6 +1616,10 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   }
   add(deck, new THREE.CylinderGeometry(0.056, 0.06, 0.02, 26), ink, joyX, 0.055, joyZ);
   add(deck, new THREE.CylinderGeometry(0.032, 0.04, 0.03, 20), rub, joyX, 0.073, joyZ);
+  // moulded ribs + clamp on the rubber gaiter
+  add(deck, new THREE.TorusGeometry(0.0375, 0.0032, 6, 26), rub, joyX, 0.0675, joyZ).rotation.x = Math.PI / 2;
+  add(deck, new THREE.TorusGeometry(0.0345, 0.0028, 6, 26), rub, joyX, 0.0785, joyZ).rotation.x = Math.PI / 2;
+  add(deck, new THREE.TorusGeometry(0.0405, 0.0036, 6, 28), chromeSoft, joyX, 0.0595, joyZ).rotation.x = Math.PI / 2;
   add(deck, new THREE.TorusGeometry(0.043, 0.0065, 8, 26), chromeMat, joyX, 0.069, joyZ).rotation.x = Math.PI / 2;
   add(deck, new THREE.TorusGeometry(0.054, 0.0045, 8, 26), pinkInk, joyX, 0.061, joyZ).rotation.x = Math.PI / 2;
 
@@ -1644,6 +1651,7 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   const btnX = 0.235;
   const btnZ = -0.01;
   add(deck, new THREE.CylinderGeometry(0.082, 0.086, 0.02, 34), ink, btnX, 0.048, btnZ);
+  add(deck, new THREE.TorusGeometry(0.0895, 0.0042, 6, 38), rub, btnX, 0.0408, btnZ).rotation.x = Math.PI / 2;
   add(deck, new THREE.TorusGeometry(0.072, 0.007, 8, 34), chromeMat, btnX, 0.058, btnZ).rotation.x = Math.PI / 2;
   add(deck, new THREE.TorusGeometry(0.066, 0.008, 8, 34), ink, btnX, 0.065, btnZ).rotation.x = Math.PI / 2;
   const btnGlowRing = add(deck, new THREE.TorusGeometry(0.061, 0.0035, 6, 36), glow('#fff0a8', 1.6), btnX, 0.066, btnZ);
@@ -1714,6 +1722,15 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   ]) {
     add(root, new THREE.PlaneGeometry(w, d), new THREE.MeshBasicMaterial({ color: '#9bdcff' }), x, 0.7214, z, false).rotation.x = -Math.PI / 2;
   }
+  // chrome lip around the drop hole
+  for (const [w, d, x, z] of [
+    [0.218, 0.008, -0.31, 0.1045],
+    [0.218, 0.008, -0.31, -0.1045],
+    [0.008, 0.2, -0.4145, 0],
+    [0.008, 0.2, -0.2055, 0],
+  ]) {
+    add(root, rbox(w, 0.005, d, 0.002), chromeSoft, x, 0.7235, z, false);
+  }
 
   // clean pale-blue back wall
   add(root, new THREE.PlaneGeometry(1.0, 0.65), new THREE.MeshBasicMaterial({ color: '#a9d8f7' }), 0, 0.985, -0.381, false);
@@ -1777,6 +1794,11 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     for (const dy of [-0.022, 0.022]) screwAt(root, -0.5055, hy + dy, 0.4435, 0.0042);
   }
 
+  // key lock for the glass door, right jamb
+  add(root, rbox(0.03, 0.052, 0.006, 0.005), chromeSoft, 0.4825, 0.948, 0.4378, false);
+  add(root, new THREE.CylinderGeometry(0.0145, 0.0145, 0.009, 18), chromeSoft, 0.4825, 0.948, 0.4392, false).rotation.x = Math.PI / 2;
+  add(root, new THREE.CircleGeometry(0.0118, 18), keyFace, 0.4825, 0.948, 0.4446, false);
+
   // glass front
   const glassFront = add(root, new THREE.PlaneGeometry(0.925, 0.575), glass, 0, 1.025, 0.401, false);
   glassFront.renderOrder = 3;
@@ -1814,7 +1836,7 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     const led = add(root, rbox(0.007, 0.596, 0.013, 0.0025), glow('#ffffff', 2.9), sx * 0.4385, 1.02, 0.301, false);
     led.renderOrder = 4;
     add(root, rbox(0.026, 0.024, 0.026, 0.006), darkPlate, sx * 0.448, 1.322, 0.301, false);
-    add(root, rbox(0.026, 0.024, 0.026, 0.006), darkPlate, sx * 0.448, 0.718, 0.301, false);
+    add(root, rbox(0.026, 0.024, 0.026, 0.006), darkPlate, sx * 0.448, 0.734, 0.301, false);
     const spill = add(
       root,
       new THREE.PlaneGeometry(0.12, 0.62),
@@ -1838,6 +1860,13 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   add(root, rbox(0.86, 0.006, 0.018, 0.002), glow('#f4fcff', 2.2), 0, 1.292, -0.24, false);
 
   /* ---------------- blue header band ---------------- */
+
+  // baked contact shadows under the big overhangs: they are what makes the
+  // marquee and the deck feel like separate masses sitting on the body
+  const aoMat = new THREE.MeshBasicMaterial({ map: aoTexture(), transparent: true, depthWrite: false });
+  add(root, new THREE.PlaneGeometry(1.02, 0.026), aoMat, 0, 1.4435, 0.4028, false).renderOrder = 2;
+  add(root, new THREE.PlaneGeometry(0.98, 0.06), aoMat, 0, 0.554, 0.4018, false).renderOrder = 1;
+  add(root, new THREE.PlaneGeometry(0.96, 0.026), aoMat, 0, 0.1345, 0.401, false).renderOrder = 1;
 
   add(root, rbox(1.045, 0.12, 0.11, 0.02), azureDeep, 0, 1.397, 0.345);
   add(
@@ -1872,8 +1901,8 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
 
   // black seal under the lightbox + chrome edge beads
   add(root, rbox(1.104, 0.01, 0.008, 0.003), matte('#231722'), 0, 1.4345, 0.3895, false);
-  add(root, rbox(1.106, 0.006, 0.012, 0.0025), chromeMat, 0, 1.7905, 0.3895, false);
-  add(root, rbox(1.106, 0.005, 0.01, 0.002), chromeMat, 0, 1.4285, 0.3895, false);
+  add(root, rbox(1.106, 0.006, 0.012, 0.0025), chromeSoft, 0, 1.7905, 0.3895, false);
+  add(root, rbox(1.106, 0.005, 0.01, 0.002), chromeSoft, 0, 1.4285, 0.3895, false);
 
   const marqueeTex = marqueeTexture();
   add(

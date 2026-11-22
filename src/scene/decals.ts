@@ -426,11 +426,12 @@ export function buildDecalAtlas(size = 2048) {
   const g = canvas.getContext('2d')!;
   g.imageSmoothingQuality = 'high';
 
-  // grow the sheet until every sticker fits at its natural size
-  let S = 1;
+  // grow the sheet until it just fits: more pixels per sticker means the
+  // print stays sharp even when a 6 cm label is only 40 px on screen
+  let S = 1.42;
   let packed = packStickers(STICKERS, S, size);
-  for (let i = 0; i < 8 && packed.bottom > size; i++) {
-    S *= 0.9;
+  for (let i = 0; i < 10 && packed.bottom > size; i++) {
+    S *= 0.94;
     packed = packStickers(STICKERS, S, size);
   }
 
