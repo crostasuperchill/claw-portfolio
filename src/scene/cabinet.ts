@@ -377,14 +377,16 @@ export function glassMaterial() {
   return new THREE.MeshPhysicalMaterial({
     color: 0xffffff,
     metalness: 0,
-    roughness: 0.03,
     transmission: cheap ? 0 : 1,
-    opacity: cheap ? 0.14 : 1,
+    opacity: cheap ? 0.1 : 1,
     thickness: 0.012,
     ior: 1.46,
+    roughness: cheap ? 0.015 : 0.03,
     transparent: true,
     side: THREE.DoubleSide,
-    envMapIntensity: 1.2,
+    envMapIntensity: cheap ? 2.8 : 1.2,
+    specularIntensity: 1,
+    reflectivity: 1,
   });
 }
 

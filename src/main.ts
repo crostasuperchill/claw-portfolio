@@ -187,20 +187,37 @@ async function boot() {
     pendingPrize = null;
   }
 
-  function metersPerPixel() {
-    const a = new THREE.Vector3(-D.playfield.w / 2, 0.7, 0).project(studio.camera);
-    const b = new THREE.Vector3(D.playfield.w / 2, 0.7, 0).project(studio.camera);
-    const px = Math.abs(b.x - a.x) * (innerWidth / 2);
-    return D.playfield.w / Math.max(px, 1);
+  const stickWorld = new THREE.Vector3();
+  function stickCenter() {
+    const node = (cabinet as unknown as { stick?: THREE.Object3D }).stick;
+    if (node) {
+      node.getWorldPosition(stickWorld);
+      stickWorld.y += 0.05;
+    } else {
+      stickWorld.set(-0.3, 0.16, 0.34);
+    }
+    const v = stickWorld.clone().project(studio.camera);
+    return { x: (v.x * 0.5 + 0.5) * innerWidth, y: (-v.y * 0.5 + 0.5) * innerHeight };
   }
+
+  let stickX = 0;
+  let stickY = 0;
 
   createControls({
     canvas,
     camera: studio.camera,
     hitTarget: cabinet.buttonHit,
+    stickCenter,
     canDrop: () => cycle.phase === 'idle' && !cardOpen,
-    metersPerPixel,
-    onAim: (dx, dz) => claw.aim(dx, dz),
+    onStick: (x, y) => {
+      stickX = x;
+      stickY = y;
+      const node = (cabinet as unknown as { stick?: THREE.Object3D }).stick;
+      if (node) {
+        node.rotation.z = -x * 0.42;
+        node.rotation.x = y * 0.32;
+      }
+    },
     onDrop: startCycle,
     onFirstGesture: () => audio.unlock(),
     onDragStart: () => hint.classList.remove('show'),
@@ -222,6 +239,7 @@ async function boot() {
     fpsAvg = fpsAvg * 0.94 + (1 / Math.max(dtRaw, 0.0001)) * 0.06;
 
     acc += dt;
+    if (cycle.phase === 'idle' && !cardOpen) claw.aim(stickX * 0.42 * dt, -stickY * 0.3 * dt);
     let steps = 0;
     while (acc >= 1 / 60 && steps < 2) {
       world.step();

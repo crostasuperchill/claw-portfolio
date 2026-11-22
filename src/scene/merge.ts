@@ -26,19 +26,26 @@ function signature(mat: THREE.Material) {
   ].join('|');
 }
 
+type Bucket = {
+  mat: THREE.Material;
+  geos: THREE.BufferGeometry[];
+  meshes: THREE.Mesh[];
+  cast: boolean;
+  receive: boolean;
+};
+
 /**
  * Fonde le mesh statiche che condividono lo stesso *look* (non la stessa istanza
  * di materiale: gli agenti ne creano una per pezzo). Trasparenti, instanziate e
  * invisibili restano separate: fonderle romperebbe ordinamento, raycast o blending.
+ *
+ * Regola d'oro: una mesh viene rimossa SOLO se il merge del suo bucket è riuscito,
+ * altrimenti sparisce dalla scena.
  */
 export function mergeStatic(root: THREE.Object3D, opts: { skip?: (mesh: THREE.Mesh) => boolean } = {}) {
   root.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert();
-  const buckets = new Map<
-    string,
-    { mat: THREE.Material; geos: THREE.BufferGeometry[]; cast: boolean; receive: boolean }
-  >();
-  const victims: THREE.Mesh[] = [];
+  const buckets = new Map<string, Bucket>();
 
   root.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
@@ -49,24 +56,26 @@ export function mergeStatic(root: THREE.Object3D, opts: { skip?: (mesh: THREE.Me
     const mat = mesh.material as THREE.Material;
     if (!mat.visible || mat.transparent || mat.depthWrite === false) return;
 
-    const geo = mesh.geometry.clone();
+    let geo = mesh.geometry.clone();
     if (!geo.attributes.uv) {
       const count = geo.attributes.position.count;
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(count * 2), 2));
     }
     if (!geo.attributes.normal) geo.computeVertexNormals();
-    geo.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, mesh.matrixWorld));
     for (const name of Object.keys(geo.attributes)) {
       if (!['position', 'normal', 'uv'].includes(name)) geo.deleteAttribute(name);
     }
+    geo.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, mesh.matrixWorld));
+    // portiamo tutto a non-indexed: geometrie con e senza index non si fondono tra loro
+    geo = geo.index ? geo.toNonIndexed() : geo;
 
     const key = signature(mat);
-    const b = buckets.get(key) ?? { mat, geos: [], cast: false, receive: false };
+    const b = buckets.get(key) ?? { mat, geos: [], meshes: [], cast: false, receive: false };
     b.geos.push(geo);
+    b.meshes.push(mesh);
     b.cast ||= mesh.castShadow;
     b.receive ||= mesh.receiveShadow;
     buckets.set(key, b);
-    victims.push(mesh);
   });
 
   for (const b of buckets.values()) {
@@ -78,10 +87,9 @@ export function mergeStatic(root: THREE.Object3D, opts: { skip?: (mesh: THREE.Me
     mesh.receiveShadow = b.receive;
     mesh.matrixAutoUpdate = false;
     root.add(mesh);
-  }
-
-  for (const mesh of victims) {
-    mesh.removeFromParent();
-    mesh.geometry.dispose();
+    for (const victim of b.meshes) {
+      victim.removeFromParent();
+      victim.geometry.dispose();
+    }
   }
 }

@@ -134,20 +134,18 @@ export function createStudio(canvas: HTMLCanvasElement) {
   function fitCamera() {
     const aspect = innerWidth / innerHeight;
     camera.aspect = aspect;
-    const target = new THREE.Vector3(0, 0.88, 0);
-    const size = new THREE.Vector3(1.1, 1.76, 0.9);
-    const vFov = THREE.MathUtils.degToRad(camera.fov);
+    // vista frontale quasi ortografica, come la macchina reale in foto
+    const fov = 21;
+    camera.fov = fov;
+    const target = new THREE.Vector3(0, 0.84, 0);
+    const size = new THREE.Vector3(1.04, 1.75, 0.9);
+    const vFov = THREE.MathUtils.degToRad(fov);
     const distV = size.y / (2 * Math.tan(vFov / 2));
     const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
     const distH = size.x / (2 * Math.tan(hFov / 2));
-    const dist = Math.max(distV, distH) * (aspect < 1 ? 1.2 : 1.12);
-    const dir = new THREE.Vector3(0.5, 0.3, 1).normalize();
-    camera.position.set(
-      target.x + dir.x * dist,
-      target.y + dir.y * dist,
-      target.z + dir.z * dist
-    );
-    camera.lookAt(target);
+    const dist = Math.max(distV, distH) * (aspect < 1 ? 1.06 : 1.02);
+    camera.position.set(0, 1.02, target.z + dist);
+    camera.lookAt(target.x, target.y + 0.02, target.z);
     camera.updateProjectionMatrix();
   }
   fitCamera();
