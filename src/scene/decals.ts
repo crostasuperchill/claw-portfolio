@@ -20,6 +20,14 @@ const LABELS = [
   'FRAGILE',
 ];
 
+function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
 export function buildDecalAtlas(size = 2048) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
@@ -53,6 +61,59 @@ export function buildDecalAtlas(size = 2048) {
     g.textBaseline = 'middle';
     g.fillText(label, 0, 1, w * 0.9);
     g.restore();
+
+    // light wear: small chips on the edges + a couple of hairline scratches.
+    // Destination-out only inside this cell, so neighbouring labels are safe.
+    const rnd = rng(0x9e37 + i * 7919);
+    g.save();
+    g.globalCompositeOperation = 'destination-out';
+    for (let k = 0; k < 18; k++) {
+      const edge = Math.floor(rnd() * 4);
+      const t = rnd();
+      let px = cx;
+      let py = cy;
+      if (edge === 0) {
+        px = cx - w / 2 + t * w;
+        py = cy - h / 2 + 1;
+      } else if (edge === 1) {
+        px = cx - w / 2 + t * w;
+        py = cy + h / 2 - 1;
+      } else if (edge === 2) {
+        px = cx - w / 2 + 1;
+        py = cy - h / 2 + t * h;
+      } else {
+        px = cx + w / 2 - 1;
+        py = cy - h / 2 + t * h;
+      }
+      g.beginPath();
+      g.ellipse(
+        px,
+        py,
+        1.5 + rnd() * 7,
+        0.8 + rnd() * 3.4,
+        rnd() * Math.PI,
+        0,
+        Math.PI * 2
+      );
+      g.fill();
+    }
+    // scuffed patch inside the print
+    g.beginPath();
+    g.ellipse(cx + (rnd() - 0.5) * w * 0.5, cy + (rnd() - 0.5) * h * 0.6, w * 0.08, h * 0.16, rnd(), 0, Math.PI * 2);
+    g.fillStyle = 'rgba(0,0,0,0.6)';
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,.55)';
+    g.lineWidth = 1.2;
+    for (let k = 0; k < 3; k++) {
+      const x0 = cx - w / 2 + rnd() * w * 0.7;
+      const y0 = cy - h / 2 + rnd() * h;
+      g.beginPath();
+      g.moveTo(x0, y0);
+      g.lineTo(x0 + w * 0.12 + rnd() * w * 0.18, y0 + (rnd() - 0.5) * 3);
+      g.stroke();
+    }
+    g.restore();
+
     rects[label] = {
       x: (cx - w / 2) / size,
       y: 1 - (cy + h / 2) / size,
@@ -67,7 +128,22 @@ export function buildDecalAtlas(size = 2048) {
   return { texture: tex, rects };
 }
 
-export function decalMesh(atlas: THREE.Texture, rect: UvRect, w: number, h: number) {
+export type DecalOptions = {
+  /** overall ink opacity: 1 new, less for sun-faded stickers */
+  opacity?: number;
+  /** white point of the print */
+  tint?: THREE.ColorRepresentation;
+  /** matte vinyl (default) vs glossier label stock */
+  gloss?: boolean;
+};
+
+export function decalMesh(
+  atlas: THREE.Texture,
+  rect: UvRect,
+  w: number,
+  h: number,
+  opts: DecalOptions = {}
+) {
   const geo = new THREE.PlaneGeometry(w, h);
   const uv = geo.attributes.uv as THREE.BufferAttribute;
   for (let i = 0; i < uv.count; i++) {
@@ -76,12 +152,17 @@ export function decalMesh(atlas: THREE.Texture, rect: UvRect, w: number, h: numb
   uv.needsUpdate = true;
   const mat = new THREE.MeshPhysicalMaterial({
     map: atlas,
+    color: opts.tint ?? '#ffffff',
     transparent: true,
+    opacity: opts.opacity ?? 0.97,
     depthWrite: false,
-    roughness: 0.32,
-    clearcoat: 0.8,
+    roughness: opts.gloss ? 0.24 : 0.48,
+    clearcoat: opts.gloss ? 0.9 : 0.28,
+    clearcoatRoughness: opts.gloss ? 0.08 : 0.4,
+    side: THREE.DoubleSide,
     polygonOffset: true,
     polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
   });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = 2;

@@ -6,6 +6,7 @@ import { D } from './scene/dims';
 import { createStudio } from './scene/studio';
 import { buildDecalAtlas } from './scene/decals';
 import { buildCabinet } from './scene/cabinet';
+import { mergeStatic } from './scene/merge';
 import { CapsuleField, makeCapsule } from './scene/capsules';
 import { addCapsule, addPlayfield, initPhysics } from './scene/physics';
 import { Claw } from './scene/claw';
@@ -35,6 +36,7 @@ async function boot() {
 
   const atlas = buildDecalAtlas();
   const cabinet = buildCabinet(atlas.texture, atlas.rects);
+  mergeStatic(cabinet.root);
   studio.scene.add(cabinet.root);
   bootFill.style.width = '42%';
   bootLabel.textContent = 'lighting the cabinet';
@@ -64,6 +66,7 @@ async function boot() {
   PROJECTS.forEach((p, i) => {
     const spot = prizeSpots[i];
     const mesh = makeCapsule({ project: p, radius: D.capsuleR });
+    mergeStatic(mesh);
     mesh.position.set(spot.x, spot.y, spot.z);
     prizeRoot.add(mesh);
     const { body, collider } = addCapsule(world, spot, D.capsuleR);
@@ -210,6 +213,7 @@ async function boot() {
 
   let last = performance.now();
   let acc = 0;
+  let shadowFrames = 0;
 
   function frame(now: number) {
     const dtRaw = (now - last) / 1000;
@@ -251,14 +255,14 @@ async function boot() {
 
     if (pendingPrize) {
       const t = pendingPrize.body.translation();
-      if (t.y < 0.5) deliver(pendingPrize);
+      if (t.y < 0.56) deliver(pendingPrize);
     }
 
     // capsule cadute nello chute e non premiate: via, altrimenti si impilano nel pozzo
     const lost: BodyRef[] = [];
     for (const ref of refs.values()) {
       if (ref.collected || ref === pendingPrize) continue;
-      if (ref.body.translation().y < 0.54) lost.push(ref);
+      if (ref.body.translation().y < 0.62) lost.push(ref);
     }
     for (const ref of lost) {
       ref.collected = true;
@@ -269,6 +273,8 @@ async function boot() {
     }
 
     studio.renderer.render(studio.scene, studio.camera);
+    shadowFrames++;
+    if (shadowFrames === 2) studio.sun.shadow.autoUpdate = false;
     requestAnimationFrame(frame);
   }
 
@@ -290,6 +296,19 @@ async function boot() {
       calls: studio.renderer.info.render.calls,
       tris: studio.renderer.info.render.triangles,
     }),
+    stats: () => {
+      const out: Record<string, number> = {};
+      let meshes = 0;
+      studio.scene.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!(m as unknown as { isMesh?: boolean }).isMesh) return;
+        meshes++;
+        const mat = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.Material | undefined;
+        const key = `${mat?.type ?? 'none'}:${(mat as THREE.MeshStandardMaterial)?.color?.getHexString?.() ?? ''}`;
+        out[key] = (out[key] ?? 0) + 1;
+      });
+      return { meshes, buckets: Object.entries(out).sort((a, b) => b[1] - a[1]).slice(0, 12) };
+    },
     probe: () => claw.probe(),
     debug: () => ({
       grabbed: claw.grabbed?.projectId ?? null,
