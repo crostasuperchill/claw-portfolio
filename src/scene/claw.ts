@@ -52,6 +52,48 @@ const ledBlue = new THREE.MeshBasicMaterial({ color: '#3f63ff', toneMapped: fals
 
 const UP = new THREE.Vector3(0, 1, 0);
 const slingDir = new THREE.Vector3();
+const cableDir = new THREE.Vector3();
+
+/**
+ * Parametri del moto. Le molle sono semplificate (semi-implicito, sottopassi a
+ * 1/240 s): il risultato e' un braccio che accelera e frena invece di scattare.
+ */
+const M = {
+  // carrello XY: molla quasi critica, velocita' limitata
+  xyOmega: 9.4,
+  xyZeta: 0.9,
+  xyMaxSpeed: 1.15,
+  // ritorno: piu' rapido e con un piccolo assestamento
+  returnOmega: 4.2,
+  returnZeta: 0.14,
+  returnMaxSpeed: 0.45,
+  // altezza: offset di massa (inerzia del claw appeso)
+  hOmega: 9.0,
+  hZeta: 0.5,
+  hGain: 1.4,
+  hKick: 0.075,
+  hKickCool: 1.2,
+  // pendolo del cavo (angoli in rad)
+  swayOmega: 5.2,
+  swayZeta: 0.32,
+  swayGain: 0.16,
+  swayLimit: 0.03,
+  swayLoadOmega: 4.3,
+  swayLoadZeta: 0.42,
+  swayLoadGain: 0.21,
+  swayLoadLimit: 0.042,
+  headLever: 0.3,
+  tiltGain: 0.9,
+  leanGain: 0.05,
+  leanLimit: 0.032,
+  leanOmega: 5.5,
+  // dita: molla sottosmorzata + ritardo meccanico per dito
+  gripOmega: 26,
+  gripZeta: 0.42,
+  gripLimit: 0.06,
+  gripRate: 2.4,
+  fingerDelay: 0.04,
+};
 
 const cableSteel = new THREE.MeshPhysicalMaterial({
   color: '#23262b',
@@ -93,6 +135,36 @@ export class Claw {
   private carriage: THREE.Group;
   private cable: THREE.Mesh;
   private slings: THREE.Mesh[] = [];
+
+  // ─── stato del moto ──────────────────────────────────────────────────────
+  /** velocita' del carrello (m/s) */
+  private vx = 0;
+  private vz = 0;
+  /** offset dell'altezza visuale rispetto al comando: la massa appesa "pesa" */
+  private hVis: number = D.clawHomeY;
+  private hOff = 0;
+  private hOffV = 0;
+  private prevCmd: number = D.clawHomeY;
+  private cmdVel = 0;
+  private prevCmdVel = 0;
+  private hKickCool = 0;
+  /** angoli di pendolo del cavo (rad) */
+  private swX = 0;
+  private swZ = 0;
+  private swVX = 0;
+  private swVZ = 0;
+  private swingKicked = false;
+  private loadK = 0;
+  private returnK = 0;
+  private sinceRelease = 99;
+  private clock = 0;
+  /** apertura visuale di ogni dito: 1 aperto, 0 chiuso (puo' superare i limiti) */
+  private fingerG = [1, 1, 1];
+  private fingerV = [0, 0, 0];
+  private gripCmd = 1;
+  private gripHist: { t: number; v: number }[] = [];
+  private leanX = 0;
+  private leanZ = 0;
 
   constructor(private world: RAPIER.World, private refs: Map<number, BodyRef>) {
     this.body = world.createRigidBody(
@@ -374,6 +446,10 @@ export class Claw {
     this.cable.castShadow = false;
 
     this.update(0);
+
+    if (typeof window !== 'undefined') {
+      (window as unknown as { __clawArm?: () => unknown }).__clawArm = () => this.sample();
+    }
   }
 
   aim(dx: number, dz: number) {
@@ -392,43 +468,273 @@ export class Claw {
   }
 
   update(dt: number) {
-    if (dt > 0) {
-      const k = 1 - Math.exp(-18 * dt);
-      this.pos.x += (this.target.x - this.pos.x) * k;
-      this.pos.y += (this.target.y - this.pos.y) * k;
+    const step = Math.min(0.05, Math.max(0, dt));
+    if (step > 0) {
+      this.clock += step;
+      this.sinceRelease += step;
+      this.hKickCool = Math.max(0, this.hKickCool - step);
     }
 
-    this.head.position.set(this.pos.x, this.height, this.pos.y);
+    const acc = this.stepPlanar(step);
+    this.stepHeight(step);
+    this.stepSway(step, acc.x, acc.z);
+    this.stepFingers(step);
+    this.applyVisual();
+  }
+
+  // ─── carrello XY: molla smorzata + limite di velocita' ────────────────────
+  private stepPlanar(dt: number) {
+    if (dt <= 0) return { x: 0, z: 0 };
+
+    // se il claw e' appena stato rilasciato ed e' diretto a casa, il ritorno
+    // e' piu' deciso dell'andata (e si assesta con un piccolo overshoot)
+    const tx = this.target.x;
+    const tz = this.target.y;
+    const nearHome = Math.hypot(tx, tz - 0.02) < 0.06;
+    const wantReturn = this.sinceRelease < 1.3 && nearHome ? 1 : 0;
+    this.returnK += (wantReturn - this.returnK) * Math.min(1, dt * 12);
+    const boost = this.returnK;
+
+    const omega = M.xyOmega + M.returnOmega * boost;
+    const zeta = M.xyZeta - M.returnZeta * boost;
+    const maxSpeed = M.xyMaxSpeed + M.returnMaxSpeed * boost;
+
+    const steps = Math.max(1, Math.ceil(dt * 240));
+    const h = dt / steps;
+    let accX = 0;
+    let accZ = 0;
+    for (let i = 0; i < steps; i++) {
+      accX = omega * omega * (tx - this.pos.x) - 2 * zeta * omega * this.vx;
+      accZ = omega * omega * (tz - this.pos.y) - 2 * zeta * omega * this.vz;
+      this.vx += accX * h;
+      this.vz += accZ * h;
+      const speed = Math.hypot(this.vx, this.vz);
+      if (speed > maxSpeed) {
+        const s = maxSpeed / speed;
+        this.vx *= s;
+        this.vz *= s;
+      }
+      this.pos.x += this.vx * h;
+      this.pos.y += this.vz * h;
+    }
+
+    const limX = D.playfield.w / 2 - 0.08;
+    const limZ = D.playfield.d / 2 - 0.08;
+    if (Math.abs(this.pos.x) > limX) {
+      this.pos.x = THREE.MathUtils.clamp(this.pos.x, -limX, limX);
+      this.vx *= -0.15;
+    }
+    if (Math.abs(this.pos.y) > limZ) {
+      this.pos.y = THREE.MathUtils.clamp(this.pos.y, -limZ, limZ);
+      this.vz *= -0.15;
+    }
+    return { x: accX, z: accZ };
+  }
+
+  // ─── altezza: offset di massa + anticipazione + stop secco in fondo ───────
+  private stepHeight(dt: number) {
+    if (dt > 0) {
+      const inst = (this.height - this.prevCmd) / dt;
+      this.cmdVel += (inst - this.cmdVel) * Math.min(1, dt * 24);
+      const rawAcc = (this.cmdVel - this.prevCmdVel) / dt;
+      this.prevCmdVel = this.cmdVel;
+      this.prevCmd = this.height;
+      const aCmd = THREE.MathUtils.clamp(rawAcc, -6, 6);
+
+      // stacco: un soffio verso l'alto prima di scendere
+      if (this.cmdVel < -0.004 && this.hKickCool <= 0 && this.height > D.clawDropY + 0.05) {
+        this.hOffV += M.hKick;
+        this.hKickCool = M.hKickCool;
+      }
+
+      // il claw e' appeso: quando il carrello accelera resta indietro, quando
+      // frena scende. Nessun ritardo a velocita' costante, solo inerzia.
+      const steps = Math.max(1, Math.ceil(dt * 240));
+      const h = dt / steps;
+      for (let i = 0; i < steps; i++) {
+        const acc = -M.hOmega * M.hOmega * this.hOff - 2 * M.hZeta * M.hOmega * this.hOffV - aCmd * M.hGain;
+        this.hOffV += acc * h;
+        this.hOff += this.hOffV * h;
+      }
+
+      // risalita con carico: il peso si stacca e il pendolo riparte
+      if (!this.swingKicked && this.grabbed && this.cmdVel > 0.012 && this.height < D.clawDropY + 0.03) {
+        this.swVX += 0.035;
+        this.swVZ -= 0.02;
+        this.swingKicked = true;
+      }
+      if (this.height > D.clawHomeY - 0.015) this.swingKicked = false;
+    }
+
+    this.hOff = THREE.MathUtils.clamp(this.hOff, -0.022, 0.022);
+    this.hVis = this.height + this.hOff;
+
+    // il fondo corsa e' netto: la molla non affonda nelle capsule
+    const lo = D.clawDropY - 0.006;
+    const hi = D.clawHomeY + 0.018;
+    if (this.hVis < lo) {
+      this.hVis = lo;
+      this.hOff = lo - this.height;
+      this.hOffV = Math.max(0, this.hOffV);
+    } else if (this.hVis > hi) {
+      this.hVis = hi;
+      this.hOff = hi - this.height;
+      this.hOffV = Math.min(0, this.hOffV);
+    }
+  }
+
+  // ─── pendolo del cavo: insegue l'accelerazione del carrello ───────────────
+  private stepSway(dt: number, ax: number, az: number) {
+    if (dt <= 0) return;
+    const wantLoad = this.grabbed ? 1 : 0;
+    this.loadK += (wantLoad - this.loadK) * Math.min(1, dt * 5);
+
+    const omega = M.swayOmega - (M.swayOmega - M.swayLoadOmega) * this.loadK;
+    const zeta = M.swayZeta + (M.swayLoadZeta - M.swayZeta) * this.loadK;
+    const gain = M.swayGain + (M.swayLoadGain - M.swayGain) * this.loadK;
+    const limit = M.swayLimit + (M.swayLoadLimit - M.swayLimit) * this.loadK;
+
+    const steps = Math.max(1, Math.ceil(dt * 240));
+    const h = dt / steps;
+    for (let i = 0; i < steps; i++) {
+      const accX = -omega * omega * this.swX - 2 * zeta * omega * this.swVX - ax * gain;
+      const accZ = -omega * omega * this.swZ - 2 * zeta * omega * this.swVZ - az * gain;
+      this.swVX += accX * h;
+      this.swVZ += accZ * h;
+      this.swX += this.swVX * h;
+      this.swZ += this.swVZ * h;
+    }
+    if (Math.abs(this.swX) > limit) {
+      this.swX = Math.sign(this.swX) * limit;
+      this.swVX *= 0.55;
+    }
+    if (Math.abs(this.swZ) > limit) {
+      this.swZ = Math.sign(this.swZ) * limit;
+      this.swVZ *= 0.55;
+    }
+
+    // con un premio attaccato il claw si inclina nella direzione del moto
+    const leanX = this.grabbed ? THREE.MathUtils.clamp(this.vz * M.leanGain, -M.leanLimit, M.leanLimit) : 0;
+    const leanZ = this.grabbed ? THREE.MathUtils.clamp(-this.vx * M.leanGain, -M.leanLimit, M.leanLimit) : 0;
+    const k = Math.min(1, dt * M.leanOmega);
+    this.leanX += (leanX - this.leanX) * k;
+    this.leanZ += (leanZ - this.leanZ) * k;
+  }
+
+  // ─── dita: ritardo meccanico di 40 ms l'una dall'altra + molla ────────────
+  private stepFingers(dt: number) {
+    if (dt > 0) {
+      // il comando di presa ha una velocita' massima: niente scatti anche
+      // quando il rilascio apre le chele in un colpo solo
+      const want = this.grip;
+      const maxStep = M.gripRate * dt;
+      this.gripCmd += THREE.MathUtils.clamp(want - this.gripCmd, -maxStep, maxStep);
+      this.gripHist.push({ t: this.clock, v: this.gripCmd });
+      while (this.gripHist.length > 2 && this.clock - this.gripHist[0].t > M.fingerDelay * 3 + 0.06) {
+        this.gripHist.shift();
+      }
+    }
+
+    const steps = Math.max(1, Math.ceil(dt * 240));
+    const h = dt / steps;
+    for (let i = 0; i < this.fingers.length; i++) {
+      const target = this.gripAt(this.clock - i * M.fingerDelay);
+      let g = this.fingerG[i];
+      let v = this.fingerV[i];
+      for (let s = 0; s < steps; s++) {
+        const acc = M.gripOmega * M.gripOmega * (target - g) - 2 * M.gripZeta * M.gripOmega * v;
+        v += acc * h;
+        g += v * h;
+      }
+      if (g < -M.gripLimit) {
+        g = -M.gripLimit;
+        v = Math.max(0, v);
+      } else if (g > 1 + M.gripLimit) {
+        g = 1 + M.gripLimit;
+        v = Math.min(0, v);
+      }
+      this.fingerG[i] = g;
+      this.fingerV[i] = v;
+    }
+  }
+
+  /** valore del comando di presa `delay` secondi fa (ritardo per dito) */
+  private gripAt(t: number) {
+    const hist = this.gripHist;
+    if (!hist.length) return this.grip;
+    let v = hist[0].v;
+    for (const s of hist) {
+      if (s.t > t) break;
+      v = s.v;
+    }
+    return v;
+  }
+
+  // ─── trasformazioni ───────────────────────────────────────────────────────
+  private applyVisual() {
+    const top = CABLE_TOP;
+    const cableLen = Math.max(0.012, top - (this.hVis + HEAD_TOP * S));
+    const lever = cableLen + M.headLever;
+
+    const headX = this.pos.x + Math.sin(this.swX) * lever;
+    const headZ = this.pos.y + Math.sin(this.swZ) * lever;
+
+    this.head.position.set(headX, this.hVis, headZ);
+    this.head.rotation.z = this.swX * M.tiltGain + this.leanZ;
+    this.head.rotation.x = -this.swZ * M.tiltGain + this.leanX;
+
+    // la fisica della presa resta sulla posizione comandata: solo l'aspetto si muove
     this.body.setNextKinematicTranslation({ x: this.pos.x, y: this.height, z: this.pos.y });
 
-    const a = THREE.MathUtils.lerp(A_CLOSED, A_OPEN, this.grip);
-    const c = THREE.MathUtils.lerp(C_CLOSED, C_OPEN, this.grip);
-    for (const f of this.fingers) {
-      f.upper.rotation.x = -a;
-      f.lower.rotation.x = c;
+    for (let i = 0; i < this.fingers.length; i++) {
+      const g = this.fingerG[i];
+      this.fingers[i].upper.rotation.x = -THREE.MathUtils.lerp(A_CLOSED, A_OPEN, g);
+      this.fingers[i].lower.rotation.x = THREE.MathUtils.lerp(C_CLOSED, C_OPEN, g);
     }
 
     this.bridge.position.x = this.pos.x;
     this.carriage.position.set(this.pos.x, 0, this.pos.y);
 
-    const top = CABLE_TOP;
-    const bottom = this.height + HEAD_TOP * S;
-    const len = Math.max(0.012, top - bottom);
-    this.cable.scale.y = len;
-    this.cable.position.set(this.pos.x, bottom + len / 2, this.pos.y);
+    // cavo dritto dal carrello alla testa, inclinato dal pendolo
+    const anchorX = this.pos.x + Math.sin(this.swX) * cableLen;
+    const anchorZ = this.pos.y + Math.sin(this.swZ) * cableLen;
+    const bottom = this.hVis + HEAD_TOP * S;
+    cableDir.set(anchorX - this.pos.x, bottom - top, anchorZ - this.pos.y);
+    const len = Math.max(0.012, cableDir.length());
+    this.cable.scale.set(1, len, 1);
+    this.cable.position.set((this.pos.x + anchorX) / 2, (top + bottom) / 2, (this.pos.y + anchorZ) / 2);
+    this.cable.quaternion.setFromUnitVectors(UP, cableDir.normalize());
 
     // tiranti a V dal carrello agli occhielli del collare
-    const anchorY = this.height - 0.0255 * S;
+    const anchorY = this.hVis - 0.0255 * S;
     for (let i = 0; i < this.slings.length; i++) {
       const sling = this.slings[i];
-      const bx = this.pos.x + (i === 0 ? -1 : 1) * 0.088 * S;
-      slingDir.set(bx - this.pos.x, anchorY - top, 0);
+      const bx = headX + (i === 0 ? -1 : 1) * 0.088 * S;
+      slingDir.set(bx - this.pos.x, anchorY - top, headZ - this.pos.y);
       const slen = Math.max(0.02, slingDir.length());
-      sling.position.set((this.pos.x + bx) / 2, (top + anchorY) / 2, this.pos.y);
+      sling.position.set((this.pos.x + bx) / 2, (top + anchorY) / 2, (this.pos.y + headZ) / 2);
       sling.scale.set(1, slen, 1);
       sling.quaternion.setFromUnitVectors(UP, slingDir.normalize());
     }
   }
+
+  /** probe read-only per gli script di verifica (nessuna scrittura) */
+  private sample() {
+    const lever = Math.max(0.012, CABLE_TOP - (this.hVis + HEAD_TOP * S)) + M.headLever;
+    return {
+      y: this.height,
+      yVis: this.hVis,
+      open: (this.fingerG[0] + this.fingerG[1] + this.fingerG[2]) / 3,
+      f: [this.fingerG[0], this.fingerG[1], this.fingerG[2]],
+      swayX: Math.sin(this.swX) * lever,
+      swayZ: Math.sin(this.swZ) * lever,
+      tiltX: this.head.rotation.x,
+      tiltZ: this.head.rotation.z,
+      vy: this.hOffV,
+      grabbed: this.grabbed !== null,
+    };
+  }
+
 
   tryGrab(): boolean {
     if (this.grabbed) return true;
@@ -473,6 +779,10 @@ export class Claw {
       this.joint = null;
     }
     this.grabbed = null;
+    // le chele si aprono gia' durante il rilascio, non a scatto quando torna idle
+    this.grip = 1;
+    this.sinceRelease = 0;
+    this.swingKicked = false;
   }
 
   get hasJoint() {

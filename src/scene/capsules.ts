@@ -1,70 +1,105 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import type { CapsuleOptions } from '../contracts';
+import { PROJECTS } from '../game/roster';
 import { makeToy } from './toys';
 
 const TAU = Math.PI * 2;
 
-/** Pastello saturo: alza la luminosità senza slavare la tinta. */
+/**
+ * Palette delle calotte, come nella foto UFO catcher:
+ * rosa, azzurro, menta, giallo, lilla, pesca.
+ * Pastelli *saturi*: la plastica stampata è corposa, non slavata.
+ * Esportata perché main.ts / altri layer possano riusarla.
+ */
+export const CAPSULE_PALETTE = [
+  '#7bc8f7', // azzurro — MagicWall
+  '#f887ba', // rosa — Jollycat
+  '#fbcf3d', // giallo — ZORA
+  '#b392f5', // lilla — Oracle
+  '#6fe0b5', // menta — Polaroids
+  '#ffa875', // pesca — Say hi
+] as const;
+
+/**
+ * Pastello saturo da tinta progetto.
+ * Mantiene la tinta, ma chiude saturazione e luminosità nella forbice
+ * della plastica gachapon: niente blu notte, niente pastello slavato.
+ */
 function plasticTint(input: THREE.ColorRepresentation): THREE.Color {
   const c = new THREE.Color(input);
   const hsl = { h: 0, s: 0, l: 0 };
   c.getHSL(hsl);
-  if (hsl.l < 0.1) {
-    // nero/bruciato: resta plastica glossy scura, non grigio slavato
-    return c.setHSL(hsl.h, Math.min(1, hsl.s + 0.08), 0.2);
+  // progetto nero/grigio -> pesca, così resta nella palette della foto
+  if (hsl.l < 0.1 || hsl.s < 0.05) {
+    return c.setHSL(0.045, 0.68, 0.72);
   }
-  const s = THREE.MathUtils.clamp(hsl.s * 1.22 + 0.12, 0.52, 1);
-  const l = THREE.MathUtils.clamp(0.46 + hsl.l * 0.24, 0.54, 0.68);
+  const s = THREE.MathUtils.clamp(hsl.s * 0.92 + 0.38, 0.68, 0.94);
+  const l = THREE.MathUtils.clamp(0.7 + (hsl.l - 0.5) * 0.07, 0.66, 0.75);
   return c.setHSL(hsl.h, s, l);
 }
 
-const PRIZE_COLORS = ['#ffb703', '#4cc9f0', '#f72585', '#06d6a0', '#ffd166', '#b5179e'];
+const PRIZE_COLORS = [...CAPSULE_PALETTE];
 
 const halfLower = (r: number) =>
-  new THREE.SphereGeometry(r, 32, 20, 0, TAU, Math.PI / 2, Math.PI / 2);
+  new THREE.SphereGeometry(r, 40, 24, 0, TAU, Math.PI / 2, Math.PI / 2);
 const halfUpper = (r: number) =>
-  new THREE.SphereGeometry(r * 0.998, 32, 20, 0, TAU, 0, Math.PI / 2);
+  new THREE.SphereGeometry(r * 0.999, 40, 24, 0, TAU, 0, Math.PI / 2);
 
-/** plastica pastello glossy della calotta inferiore */
+/** plastica pastello opaca, con un velo di clearcoat (non uno specchio) */
 function shellMaterial() {
   return new THREE.MeshPhysicalMaterial({
     color: '#ffffff',
-    roughness: 0.13,
+    roughness: 0.37,
     metalness: 0,
-    clearcoat: 1,
-    clearcoatRoughness: 0.025,
-    envMapIntensity: 1.3,
+    clearcoat: 0.38,
+    clearcoatRoughness: 0.22,
+    envMapIntensity: 0.9,
     ior: 1.46,
   });
 }
 
 /**
- * Calotta superiore: guscio sottile, non lattiginoso.
- * Niente DoubleSide (raddoppiava riflessi e rifrazione -> effetto latte),
- * thickness minima e trasmissione alta lasciano vedere il premio.
+ * Calotta superiore in plastica TRASPARENTE.
+ *
+ * Niente transmission: main.ts la azzera comunque per tenere nitida la teca,
+ * e la trasmissione di three sfoca quello che sta dietro. Il trucco è
+ * trasparenza bassa + riflessi d'ambiente forti + clearcoat: la sfera legge
+ * come guscio sottile e lucido, e il premio resta perfettamente a fuoco.
+ * L'alpha è modulato in Fresnel: quasi invisibile al centro (il giocattolo
+ * resta nitido), corposo e riflettente sul bordo, dove si vede lo spessore
+ * della plastica. DoubleSide aggiunge la parete interna e il riflesso di
+ * taglio: spessore da vera calotta stampata, non da bolla di sapone.
  */
 function glassMaterial() {
-  const cheap =
-    typeof location !== 'undefined' &&
-    (new URLSearchParams(location.search).has('notrans') ||
-      (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches));
-  return new THREE.MeshPhysicalMaterial({
-    color: '#ffffff',
-    roughness: 0.028,
+  const m = new THREE.MeshPhysicalMaterial({
+    color: '#e8f6ff',
+    roughness: 0.02,
     metalness: 0,
-    transmission: cheap ? 0 : 0.92,
-    opacity: cheap ? 0.3 : 1,
-    thickness: 0.001,
-    ior: 1.47,
-    side: THREE.FrontSide,
-    clearcoat: 1,
-    clearcoatRoughness: 0.02,
-    envMapIntensity: 1.75,
-    specularIntensity: 1,
+    transmission: 0,
     transparent: true,
+    opacity: 0.12,
     depthWrite: false,
+    side: THREE.DoubleSide,
+    clearcoat: 1,
+    clearcoatRoughness: 0.018,
+    envMapIntensity: 2.3,
+    ior: 1.49,
+    specularIntensity: 1.4,
   });
+
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <normal_fragment_maps>',
+      `#include <normal_fragment_maps>
+       float glassFresnel = pow(1.0 - saturate(abs(dot(normal, normalize(vViewPosition)))), 1.7);
+       // centro limpido ma non invisibile, bordo spesso e lucido
+       diffuseColor.a = mix(opacity * 0.5, opacity * 3.8, glassFresnel);`
+    );
+  };
+  m.customProgramCacheKey = () => 'capsule-glass-fresnel-v3';
+  return m;
 }
 
 let ringBump: THREE.CanvasTexture | null = null;
@@ -88,23 +123,37 @@ function ringBumpTexture() {
   return t;
 }
 
-/** anello di giunzione sottile, leggermente rigato */
+/**
+ * Anello di giunzione bianco, sottile, con la linguetta di apertura.
+ * Anello + linguetta sono un'unica geometria: le capsule riempitive restano
+ * a 4 draw call (lower, upper, ring, prize) e i premi non aggiungono mesh.
+ */
 function ringGeometry(r: number) {
-  const geo = new THREE.TorusGeometry(r * 0.994, r * 0.019, 8, 48);
-  geo.rotateX(Math.PI / 2);
-  return geo;
+  // toro schiacciato: fascia stampata, non un tubo da idraulico
+  const torus = new THREE.TorusGeometry(r * 0.994, r * 0.03, 12, 72);
+  torus.rotateX(Math.PI / 2);
+  torus.scale(1, 0.55, 1);
+
+  // linguetta sul fianco, dove si pinza per aprire la capsula
+  const ang = 0.58;
+  const tab = new RoundedBoxGeometry(r * 0.105, r * 0.048, r * 0.14, 3, r * 0.017);
+  tab.rotateY(-ang);
+  tab.translate(Math.cos(ang) * r, 0, Math.sin(ang) * r);
+
+  const merged = mergeGeometries([torus.toNonIndexed(), tab], false);
+  return merged ?? torus;
 }
 
-function ringMaterial(color?: THREE.Color) {
+function ringMaterial() {
   return new THREE.MeshPhysicalMaterial({
-    color: color ?? '#ffffff',
-    roughness: 0.2,
+    color: '#fffdfa',
+    roughness: 0.28,
     metalness: 0,
-    clearcoat: 1,
-    clearcoatRoughness: 0.05,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.14,
     bumpMap: ringBumpTexture(),
-    bumpScale: 0.0005,
-    envMapIntensity: 1.2,
+    bumpScale: 0.0004,
+    envMapIntensity: 1.15,
   });
 }
 
@@ -141,55 +190,146 @@ function prizeGeometry(r: number) {
 function prizeMaterial() {
   return new THREE.MeshPhysicalMaterial({
     color: '#ffffff',
-    roughness: 0.27,
+    roughness: 0.38,
     metalness: 0,
-    clearcoat: 0.7,
-    clearcoatRoughness: 0.14,
+    clearcoat: 0.45,
+    clearcoatRoughness: 0.2,
     envMapIntensity: 1.1,
   });
 }
 
-function labelTexture(title: string, color: string) {
-  const c = document.createElement('canvas');
-  c.width = 512;
-  c.height = 236;
-  const g = c.getContext('2d')!;
-  g.fillStyle = '#fbf6ea';
-  g.fillRect(0, 0, 512, 236);
-  g.strokeStyle = '#e4d9c2';
-  g.lineWidth = 8;
-  g.strokeRect(5, 5, 502, 226);
+/* ------------------------------------------------------------------ */
+/* etichetta                                                           */
+/* ------------------------------------------------------------------ */
 
-  g.fillStyle = color;
-  g.fillRect(18, 18, 476, 66);
-  g.fillStyle = 'rgba(255,255,255,0.88)';
-  g.font = '800 20px "Helvetica Neue", Arial, sans-serif';
-  g.textAlign = 'left';
-  g.textBaseline = 'middle';
-  g.fillText('DAVIDE.FYI  ·  PRIZE', 36, 52);
-
-  const t = title.toUpperCase();
-  let size = 72;
-  g.font = `800 ${size}px "Helvetica Neue", Arial, sans-serif`;
-  while (g.measureText(t).width > 452 && size > 24) {
-    size -= 2;
-    g.font = `800 ${size}px "Helvetica Neue", Arial, sans-serif`;
+/** colore della banda: tinta progetto, scurita quanto basta al testo bianco */
+function bandColor(hex: string): THREE.Color {
+  const c = new THREE.Color(hex);
+  const hsl = { h: 0, s: 0, l: 0 };
+  c.getHSL(hsl);
+  if (hsl.l < 0.1 || hsl.s < 0.06) {
+    // "Say hi" è nero: banda pesca, coerente con la calotta
+    return c.setHSL(0.04, 0.78, 0.52);
   }
-  g.fillStyle = '#241f18';
-  g.textAlign = 'center';
-  g.fillText(t, 256, 146, 456);
+  const s = THREE.MathUtils.clamp(hsl.s * 0.96 + 0.1, 0.68, 1);
+  const l = THREE.MathUtils.clamp(hsl.l, 0.32, 0.47);
+  return c.setHSL(hsl.h, s, l);
+}
 
-  g.fillStyle = color;
+/** divide il titolo in una o due righe bilanciate, senza spezzare parole */
+function titleLines(title: string): string[] {
+  const words = title.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || title.length <= 11) return [title];
+  let best = [title];
+  let bestMax = Infinity;
+  for (let i = 1; i < words.length; i++) {
+    const a = words.slice(0, i).join(' ');
+    const b = words.slice(i).join(' ');
+    const m = Math.max(a.length, b.length);
+    if (m < bestMax) {
+      bestMax = m;
+      best = [a, b];
+    }
+  }
+  return best;
+}
+
+function labelTexture(title: string, color: string) {
+  const W = 512;
+  const H = 227;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  const band = bandColor(color);
+  const top = band.clone().offsetHSL(0, -0.03, 0.045);
+  const bottom = band.clone().offsetHSL(0, 0.02, -0.045);
+
+  // banda colorata piena, con una leggera incurvatura di stampa
+  const grad = g.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, `#${top.getHexString()}`);
+  grad.addColorStop(1, `#${bottom.getHexString()}`);
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, H);
+
+  // grana carta, quasi invisibile da lontano ma toglie il plastificato piatto
+  const rnd = mulberryLike(0x1abe11);
+  g.fillStyle = 'rgba(255,255,255,0.05)';
+  for (let i = 0; i < 900; i++) g.fillRect(rnd() * W, rnd() * H, 1, 1);
+  g.fillStyle = 'rgba(0,0,0,0.045)';
+  for (let i = 0; i < 600; i++) g.fillRect(rnd() * W, rnd() * H, 1, 1);
+
+  // filo di taglio: scuro, così non fa una seconda ghiera bianca
+  g.strokeStyle = 'rgba(0,0,0,0.13)';
+  g.lineWidth = 2;
   g.beginPath();
-  g.arc(42, 202, 9, 0, TAU);
-  g.fill();
-  g.fillStyle = '#8b8170';
-  g.font = '700 18px "Helvetica Neue", Arial, sans-serif';
+  g.roundRect(10, 10, W - 20, H - 20, 10);
+  g.stroke();
+
+  g.fillStyle = 'rgba(255,255,255,0.94)';
+  g.textBaseline = 'middle';
   g.textAlign = 'left';
-  g.fillText('COLLECTIBLE CAPSULE', 62, 208);
-  g.fillStyle = '#b8ad97';
+  g.letterSpacing = '1.4px';
+  g.font = '800 13px "Helvetica Neue", Arial, sans-serif';
+  g.fillText('DAVIDE.FYI', 26, 25);
   g.textAlign = 'right';
-  g.fillText('No. 01', 494, 208);
+  g.font = '800 12px "Helvetica Neue", Arial, sans-serif';
+  g.fillText('PRIZE', W - 26, 25);
+  g.letterSpacing = '0px';
+
+  g.strokeStyle = 'rgba(255,255,255,0.3)';
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.moveTo(26, 38);
+  g.lineTo(W - 26, 38);
+  g.stroke();
+
+  // nome progetto: bianco, grande, condensato solo quanto serve
+  const lines = titleLines(title.toUpperCase());
+  const areaTop = 45;
+  const areaH = 148;
+  const maxW = W - 48;
+  const start =
+    lines.length === 1 ? 142 : Math.min(92, Math.floor((areaH - 6) / lines.length / 1.01));
+  let size = start;
+  let sx = 1;
+  for (;;) {
+    g.font = `900 ${size}px "Helvetica Neue", "Arial Black", Arial, sans-serif`;
+    const widest = Math.max(...lines.map((l) => g.measureText(l).width));
+    sx = Math.min(1, maxW / widest);
+    if (sx >= 0.78 || size <= 30) break;
+    size -= 2;
+  }
+  const lineH = size * 1.01;
+  const total = lineH * lines.length;
+  const firstY = areaTop + (areaH - total) / 2 + lineH / 2;
+
+  g.save();
+  g.beginPath();
+  g.rect(18, areaTop - 4, W - 36, areaH + 8);
+  g.clip();
+  g.fillStyle = '#ffffff';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.shadowColor = 'rgba(0,0,0,0.22)';
+  g.shadowBlur = 5;
+  g.shadowOffsetY = 2;
+  lines.forEach((line, i) => {
+    g.save();
+    g.translate(W / 2, firstY + i * lineH);
+    g.scale(sx, 1);
+    g.fillText(line, 0, 0);
+    g.restore();
+  });
+  g.restore();
+
+  // riga di servizio in basso
+  g.fillStyle = 'rgba(255,255,255,0.8)';
+  g.textAlign = 'center';
+  g.letterSpacing = '2.4px';
+  g.font = '800 10px "Helvetica Neue", Arial, sans-serif';
+  g.fillText('COLLECTIBLE CAPSULE', W / 2, 209);
+  g.letterSpacing = '0px';
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -197,20 +337,52 @@ function labelTexture(title: string, color: string) {
   return tex;
 }
 
+/** PRNG deterministico: la grana della carta non cambia a ogni reload */
+function mulberryLike(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /**
- * Adesivo curvo sulla calotta inferiore.
- * Centrato verso la camera di default (+x, +z) così il titolo si legge.
+ * Adesivo curvo sulla calotta inferiore (solo lì: la cupola trasparente
+ * resta libera, così il premio si vede).
+ * Centrato su +z (camera di default), patch largo ~96°, alto ~40°.
  */
+const LABEL_PHI = 1.68;
+const LABEL_THETA_START = Math.PI / 2 + 0.02;
+const LABEL_THETA = 0.7;
+
 function labelGeometry(r: number) {
   return new THREE.SphereGeometry(
-    r * 1.004,
-    40,
-    20,
-    Math.PI / 2 + 0.45 - 0.575,
-    1.15,
-    Math.PI / 2 + 0.16,
-    0.44
+    r * 1.006,
+    52,
+    26,
+    Math.PI / 2 - LABEL_PHI / 2,
+    LABEL_PHI,
+    LABEL_THETA_START,
+    LABEL_THETA
   );
+}
+
+function labelMaterial(tex: THREE.Texture) {
+  return new THREE.MeshPhysicalMaterial({
+    map: tex,
+    roughness: 0.58,
+    metalness: 0,
+    clearcoat: 0.14,
+    clearcoatRoughness: 0.42,
+    envMapIntensity: 0.65,
+    side: THREE.FrontSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  });
 }
 
 /** Capsule "riempitive" tutte in 4 draw call. */
@@ -229,14 +401,11 @@ export class CapsuleField {
     this.lower = new THREE.InstancedMesh(halfLower(r), shellMaterial(), count);
     this.upper = new THREE.InstancedMesh(halfUpper(r), glassMaterial(), count);
     this.ring = new THREE.InstancedMesh(ringGeometry(r), ringMaterial(), count);
-    this.inner = new THREE.InstancedMesh(
-      prizeGeometry(r),
-      prizeMaterial(),
-      count
-    );
+    this.inner = new THREE.InstancedMesh(prizeGeometry(r), prizeMaterial(), count);
 
     this.lower.castShadow = true;
     this.lower.receiveShadow = true;
+
     this.group.add(this.lower, this.upper, this.ring, this.inner);
 
     const zero = new THREE.Matrix4().makeScale(0, 0, 0);
@@ -252,10 +421,9 @@ export class CapsuleField {
   setColor(index: number, color: string) {
     const shell = plasticTint(color);
     this.lower.setColorAt(index, shell);
-    this.ring.setColorAt(index, shell.clone().offsetHSL(0, 0, -0.05));
+    // anello sempre bianco: niente instanceColor, resta una sola draw call
     this.inner.setColorAt(index, new THREE.Color(PRIZE_COLORS[index % PRIZE_COLORS.length]));
     if (this.lower.instanceColor) this.lower.instanceColor.needsUpdate = true;
-    if (this.ring.instanceColor) this.ring.instanceColor.needsUpdate = true;
     if (this.inner.instanceColor) this.inner.instanceColor.needsUpdate = true;
   }
 
@@ -284,21 +452,18 @@ export class CapsuleField {
 export function makeCapsule(opts: CapsuleOptions): THREE.Group {
   const { project, radius, tint } = opts;
   const g = new THREE.Group();
-  const base = plasticTint(tint ?? project?.color ?? '#f0b6cd');
+  // calotta premio: palette della foto, una tinta per progetto (fallback sulla tinta progetto)
+  const paletteIndex = project ? PROJECTS.findIndex((p) => p.id === project.id) : -1;
+  const base =
+    tint !== undefined
+      ? plasticTint(tint)
+      : paletteIndex >= 0
+        ? new THREE.Color(CAPSULE_PALETTE[paletteIndex % CAPSULE_PALETTE.length])
+        : plasticTint(project?.color ?? '#f0b6cd');
   const r = radius;
 
-  const lower = new THREE.Mesh(
-    halfLower(r),
-    new THREE.MeshPhysicalMaterial({
-      color: base,
-      roughness: 0.13,
-      metalness: 0,
-      clearcoat: 1,
-      clearcoatRoughness: 0.025,
-      envMapIntensity: 1.3,
-      ior: 1.46,
-    })
-  );
+  const lower = new THREE.Mesh(halfLower(r), shellMaterial());
+  (lower.material as THREE.MeshPhysicalMaterial).color.copy(base);
   lower.castShadow = true;
   lower.receiveShadow = true;
   g.add(lower);
@@ -306,29 +471,22 @@ export function makeCapsule(opts: CapsuleOptions): THREE.Group {
   const upper = new THREE.Mesh(halfUpper(r), glassMaterial());
   g.add(upper);
 
-  const ringColor = base.clone().offsetHSL(0, 0, -0.045);
-  const ring = new THREE.Mesh(ringGeometry(r), ringMaterial(ringColor));
+  const ring = new THREE.Mesh(ringGeometry(r), ringMaterial());
   g.add(ring);
 
   const toy = makeToy(project?.toy ?? 'charm', project?.color ?? '#ffd0e0');
-  toy.scale.setScalar(0.94);
-  toy.position.y = 0.014;
+  toy.scale.setScalar(0.9);
+  toy.position.y = 0.004;
   g.add(toy);
 
   if (project) {
-    const labelMat = new THREE.MeshPhysicalMaterial({
-      map: labelTexture(project.title, project.color),
-      roughness: 0.36,
-      metalness: 0,
-      clearcoat: 0.65,
-      clearcoatRoughness: 0.15,
-      side: THREE.FrontSide,
-    });
+    const tex = labelTexture(project.title, project.color);
+    const mat = labelMaterial(tex);
     const geo = labelGeometry(r);
-    const front = new THREE.Mesh(geo, labelMat);
+    const front = new THREE.Mesh(geo, mat);
     g.add(front);
-    // seconda etichetta sul lato opposto: si vede anche dopo un mezzo giro
-    const back = new THREE.Mesh(geo, labelMat);
+    // seconda etichetta sul lato opposto: si legge anche dopo un mezzo giro
+    const back = new THREE.Mesh(geo, mat);
     back.rotation.y = Math.PI;
     g.add(back);
   }

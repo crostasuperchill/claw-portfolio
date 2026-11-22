@@ -1,8 +1,14 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Toy } from '../game/roster';
 import { chrome, glow, plastic } from './materials';
+
+/**
+ * Capsule prizes. Everything is designed to stay legible at 7 cm: one bold
+ * silhouette, two or three saturated pastel colours, a single big graphic.
+ * No detail is smaller than 2 mm, because below that it turns to mush in
+ * the glass capsule.
+ */
 
 /** Canvas helper: sRGB texture from a 2D drawing pass. */
 function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => void) {
@@ -12,414 +18,692 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
   draw(c.getContext('2d')!);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
+  t.anisotropy = 8;
   return t;
 }
 
-function screenMat(map: THREE.Texture) {
+function screenMat(map: THREE.Texture, intensity = 1.15) {
   return new THREE.MeshStandardMaterial({
     map,
     emissive: new THREE.Color('#ffffff'),
     emissiveMap: map,
-    emissiveIntensity: 1.05,
-    roughness: 0.16,
+    emissiveIntensity: intensity,
+    roughness: 0.14,
     metalness: 0,
   });
 }
 
+function printMat(map: THREE.Texture) {
+  return new THREE.MeshStandardMaterial({ map, roughness: 0.55, metalness: 0 });
+}
+
+function fitFont(
+  g: CanvasRenderingContext2D,
+  text: string,
+  max: number,
+  start: number,
+  weight = 800
+) {
+  let size = start;
+  g.font = `${weight} ${size}px "Helvetica Neue", Inter, Arial, sans-serif`;
+  while (g.measureText(text).width > max && size > 20) {
+    size -= 1;
+    g.font = `${weight} ${size}px "Helvetica Neue", Inter, Arial, sans-serif`;
+  }
+  return size;
+}
+
+function roundRect(
+  g: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  g.beginPath();
+  g.roundRect(x, y, w, h, r);
+}
+
+/* ------------------------------------------------------------------ */
+/* palette                                                             */
+/* ------------------------------------------------------------------ */
+
+const P = {
+  pink: '#ff8fbe',
+  pinkDeep: '#ec4f8d',
+  pinkPale: '#ffd0e2',
+  azure: '#7cc6ff',
+  azureDeep: '#3d8fdd',
+  mint: '#8fe8c8',
+  yellow: '#ffd45e',
+  yellowDeep: '#eda92e',
+  lilac: '#bda6ff',
+  lilacDeep: '#8c6fe0',
+  cream: '#fffaf0',
+  ink: '#2b2433',
+  plum: '#563b5c',
+  screen: '#c6f7dc',
+} as const;
+
+/* ------------------------------------------------------------------ */
+/* textures                                                            */
+/* ------------------------------------------------------------------ */
+
+/** Tamagotchi LCD: a big pixel face, readable through the dome. */
 function pocketScreen() {
-  return canvasTex(64, 64, (g) => {
-    g.fillStyle = '#cdeedb';
-    g.fillRect(0, 0, 64, 64);
+  return canvasTex(160, 130, (g) => {
+    g.fillStyle = P.screen;
+    g.fillRect(0, 0, 160, 130);
     const px = (x: number, y: number, w: number, h: number, c: string) => {
       g.fillStyle = c;
       g.fillRect(x, y, w, h);
     };
-    // pixel pet: ears, head, body
-    const ink = '#20362b';
-    px(17, 20, 30, 22, ink);
-    px(14, 14, 8, 8, ink);
-    px(42, 14, 8, 8, ink);
-    px(17, 24, 30, 14, '#eaf9f0');
-    px(18, 26, 4, 4, ink);
-    px(42, 26, 4, 4, ink);
-    px(30, 32, 4, 3, ink);
-    px(26, 37, 12, 3, ink);
-    px(24, 42, 16, 14, ink);
-    px(27, 45, 10, 8, '#eaf9f0');
-    px(8, 8, 6, 6, '#ff5f7e');
-    px(13, 8, 6, 6, '#ff5f7e');
-    px(10, 13, 8, 5, '#ff5f7e');
-    px(6, 58, 52, 2, '#9fd3b5');
+    const ink = '#204034';
+    // ears + head
+    px(32, 20, 96, 86, ink);
+    px(22, 4, 30, 30, ink);
+    px(108, 4, 30, 30, ink);
+    px(40, 28, 80, 70, '#f8fff9');
+    // big eyes
+    px(52, 42, 22, 27, ink);
+    px(86, 42, 22, 27, ink);
+    // wide smile
+    px(60, 78, 40, 10, ink);
+    px(52, 72, 8, 8, ink);
+    px(100, 72, 8, 8, ink);
+    // blush
+    px(40, 64, 10, 8, '#ff8fae');
+    px(110, 64, 10, 8, '#ff8fae');
   });
 }
 
+/** Handheld screen: bold sunset landscape, no tiny HUD text. */
 function handheldScreen() {
-  return canvasTex(96, 72, (g) => {
-    const sky = g.createLinearGradient(0, 0, 0, 54);
-    sky.addColorStop(0, '#59b7ff');
-    sky.addColorStop(1, '#c9ecff');
+  return canvasTex(320, 220, (g) => {
+    const sky = g.createLinearGradient(0, 0, 0, 220);
+    sky.addColorStop(0, '#4fb3ff');
+    sky.addColorStop(0.58, '#a9dcff');
+    sky.addColorStop(1, '#ffd3e6');
     g.fillStyle = sky;
-    g.fillRect(0, 0, 96, 72);
+    g.fillRect(0, 0, 320, 220);
+
+    // sun
     g.fillStyle = '#ffe15c';
     g.beginPath();
-    g.arc(77, 14, 8, 0, Math.PI * 2);
+    g.arc(246, 62, 42, 0, Math.PI * 2);
     g.fill();
-    g.fillStyle = '#ffffff';
-    g.fillRect(8, 12, 14, 5);
-    g.fillRect(12, 9, 6, 5);
-    g.fillStyle = '#46a95b';
-    g.fillRect(0, 52, 96, 20);
-    g.fillStyle = '#3a8f4c';
+
+    // cloud
+    g.fillStyle = 'rgba(255,255,255,0.94)';
+    roundRect(g, 34, 58, 92, 24, 12);
+    g.fill();
+    roundRect(g, 54, 42, 52, 28, 14);
+    g.fill();
+
+    const mountain = (color: string, pts: number[][]) => {
+      g.fillStyle = color;
+      g.beginPath();
+      g.moveTo(0, 220);
+      pts.forEach(([x, y]) => g.lineTo(x, y));
+      g.lineTo(320, 220);
+      g.closePath();
+      g.fill();
+    };
+    mountain('#7a5cff', [
+      [0, 164],
+      [66, 88],
+      [126, 152],
+      [192, 80],
+      [260, 148],
+      [320, 108],
+    ]);
+    mountain('#3f7ee8', [
+      [0, 190],
+      [86, 136],
+      [152, 180],
+      [232, 126],
+      [320, 174],
+    ]);
+    mountain('#79d8b0', [
+      [0, 208],
+      [66, 180],
+      [146, 204],
+      [232, 178],
+      [320, 202],
+    ]);
+
+    // big pink heart, the only HUD
+    g.fillStyle = '#ff4f7d';
+    const hx = 46;
+    const hy = 178;
     g.beginPath();
-    g.arc(20, 58, 20, Math.PI, 0);
+    g.arc(hx - 10, hy, 11, 0, Math.PI * 2);
+    g.arc(hx + 10, hy, 11, 0, Math.PI * 2);
     g.fill();
-    // runner
-    g.fillStyle = '#ffcf9e';
-    g.fillRect(44, 37, 6, 6);
-    g.fillStyle = '#2b2b3a';
-    g.fillRect(43, 43, 8, 8);
-    g.fillStyle = '#ff4f6d';
-    g.fillRect(42, 44, 2, 5);
-    g.fillRect(50, 44, 2, 5);
-    g.fillStyle = '#2b2b3a';
-    g.fillRect(44, 51, 2, 4);
-    g.fillRect(48, 51, 2, 4);
-    g.fillStyle = '#1b2b45';
-    g.font = '700 7px "Helvetica Neue", Arial, sans-serif';
-    g.textAlign = 'left';
-    g.fillText('1UP', 5, 8);
-    g.fillText('0420', 5, 16);
-    g.fillStyle = '#ff4f6d';
-    for (let i = 0; i < 3; i++) g.fillRect(62 + i * 9, 5, 5, 5);
+    g.beginPath();
+    g.moveTo(hx - 20, hy + 2);
+    g.lineTo(hx, hy + 26);
+    g.lineTo(hx + 20, hy + 2);
+    g.closePath();
+    g.fill();
   });
 }
 
-function floppyLabel(color: string) {
-  return canvasTex(256, 256, (g) => {
-    g.fillStyle = '#f4eedd';
-    g.fillRect(0, 0, 256, 256);
-    g.strokeStyle = '#d9d0bb';
-    g.lineWidth = 6;
-    g.strokeRect(7, 7, 242, 242);
-    g.fillStyle = color;
-    g.fillRect(18, 18, 220, 46);
+/** Floppy label: strong header + fat bars, readable as a label at 40 px. */
+function floppyLabel(accent: string) {
+  return canvasTex(320, 300, (g) => {
+    g.fillStyle = '#fffdf4';
+    g.fillRect(0, 0, 320, 300);
+    g.strokeStyle = '#ded4c0';
+    g.lineWidth = 8;
+    g.strokeRect(6, 6, 308, 288);
+
+    g.fillStyle = accent;
+    g.fillRect(12, 12, 296, 62);
     g.fillStyle = '#ffffff';
-    g.font = '800 24px "Helvetica Neue", Arial, sans-serif';
+    g.font = '800 30px "Helvetica Neue", Arial, sans-serif';
     g.textAlign = 'left';
     g.textBaseline = 'middle';
-    g.fillText('DAVIDE', 30, 42);
-    g.font = '800 18px "Helvetica Neue", Arial, sans-serif';
+    g.fillText('FLOPPY', 28, 44);
+    g.font = '800 22px "Helvetica Neue", Arial, sans-serif';
     g.textAlign = 'right';
-    g.fillText('HD', 224, 42);
-    g.fillStyle = '#b9b09b';
-    for (let i = 0; i < 3; i++) g.fillRect(30, 92 + i * 18, 196, 3);
-    g.fillStyle = '#6f6858';
-    g.font = '700 17px "Helvetica Neue", Arial, sans-serif';
+    g.fillText('HD', 294, 44);
+
+    g.fillStyle = '#8d8574';
+    for (let i = 0; i < 3; i++) g.fillRect(30, 100 + i * 26, 260, 8);
+
+    g.fillStyle = '#4f493d';
+    g.font = '800 26px "Helvetica Neue", Arial, sans-serif';
     g.textAlign = 'left';
-    g.fillText('1.44 MB', 30, 160);
-    g.fillText('IBM FORMAT', 30, 180);
-    // barcode
-    g.fillStyle = '#221f1a';
-    let x = 30;
-    const bars = [3, 1, 2, 4, 1, 3, 2, 1, 4, 2, 3, 1, 2, 3, 1, 2];
-    bars.forEach((w, i) => {
-      g.fillRect(x, 196, w, 34);
-      x += w + (i % 2 ? 3 : 2);
-    });
-    g.fillStyle = color;
+    g.fillText('1.44 MB', 30, 200);
+
+    g.fillStyle = accent;
     g.beginPath();
-    g.arc(214, 208, 17, 0, Math.PI * 2);
+    g.arc(256, 208, 30, 0, Math.PI * 2);
     g.fill();
     g.fillStyle = '#ffffff';
-    g.font = '800 17px "Helvetica Neue", Arial, sans-serif';
-    g.textAlign = 'center';
-    g.fillText('D', 214, 216);
-  });
-}
-
-function cartLabel(color: string) {
-  return canvasTex(256, 256, (g) => {
-    g.fillStyle = '#f6f0df';
-    g.fillRect(0, 0, 256, 256);
-    g.fillStyle = color;
-    g.fillRect(0, 0, 256, 150);
-    g.fillStyle = 'rgba(255,255,255,0.22)';
-    g.fillRect(0, 0, 256, 10);
-    // pixel star badge
-    g.fillStyle = '#fffdf5';
     g.font = '800 30px "Helvetica Neue", Arial, sans-serif';
     g.textAlign = 'center';
+    g.fillText('D', 256, 212);
+
+    g.fillStyle = '#2a2620';
+    let x = 30;
+    const bars = [8, 4, 6, 12, 4, 9, 6, 4, 12, 6, 9, 4, 6, 8, 4, 6, 9];
+    bars.forEach((w, i) => {
+      g.fillRect(x, 244, w, 36);
+      x += w + (i % 2 ? 8 : 5);
+    });
+  });
+}
+
+/** Cartridge label: huge ZORA wordmark, white data band, no lens-like circle. */
+function cartLabel() {
+  return canvasTex(320, 300, (g) => {
+    const grad = g.createLinearGradient(0, 0, 320, 300);
+    grad.addColorStop(0, '#ff7a3d');
+    grad.addColorStop(0.6, '#ff3d6e');
+    grad.addColorStop(1, '#c81f56');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 320, 300);
+
+    g.fillStyle = 'rgba(255,255,255,0.18)';
+    g.fillRect(0, 0, 320, 12);
+
+    g.fillStyle = '#fffdf4';
+    g.font = '800 76px "Helvetica Neue", Arial, sans-serif';
+    g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText('★', 128, 54);
-    g.font = '800 34px "Helvetica Neue", Arial, sans-serif';
-    g.fillText('PLAY', 128, 108);
-    g.fillStyle = '#2a241c';
-    g.font = '800 22px "Helvetica Neue", Arial, sans-serif';
-    g.fillText('8-BIT EDITION', 128, 190);
-    g.fillStyle = '#b9af99';
-    g.fillRect(36, 214, 184, 3);
-    g.fillStyle = '#7b7362';
-    g.font = '700 14px "Helvetica Neue", Arial, sans-serif';
-    g.fillText('DAVIDE.FYI', 128, 234);
+    g.fillText('ZORA', 160, 68);
+
+    g.fillStyle = 'rgba(255,255,255,0.72)';
+    g.fillRect(30, 112, 260, 4);
+
+    // white data band with the cartridge format
+    g.fillStyle = '#fffdf4';
+    roundRect(g, 30, 130, 260, 96, 12);
+    g.fill();
+    g.fillStyle = '#c81f56';
+    g.font = '800 42px "Helvetica Neue", Arial, sans-serif';
+    g.fillText('8-BIT', 160, 162);
+    g.fillStyle = '#3a2330';
+    g.font = '800 24px "Helvetica Neue", Arial, sans-serif';
+    g.fillText('CARTRIDGE', 160, 202);
+
+    // gold contact squares
+    g.fillStyle = '#ffd166';
+    for (let i = 0; i < 4; i++) g.fillRect(52 + i * 58, 252, 42, 16);
+    g.fillStyle = '#fffdf4';
+    g.font = '800 20px "Helvetica Neue", Arial, sans-serif';
+    g.fillText('ZORA.CO', 160, 286);
+
+    g.strokeStyle = 'rgba(255,255,255,0.55)';
+    g.lineWidth = 5;
+    g.strokeRect(10, 10, 300, 280);
   });
 }
 
+/** Gold edge connector, chunky contacts (3 mm pitch). */
 function cartEdge() {
-  return canvasTex(128, 32, (g) => {
-    g.fillStyle = '#1c3a2a';
-    g.fillRect(0, 0, 128, 32);
-    g.fillStyle = '#d8b45a';
-    for (let i = 0; i < 8; i++) g.fillRect(5 + i * 15, 9, 8, 14);
+  return canvasTex(160, 40, (g) => {
+    g.fillStyle = '#20362b';
+    g.fillRect(0, 0, 160, 40);
+    g.fillStyle = '#e0b95d';
+    for (let i = 0; i < 10; i++) g.fillRect(6 + i * 15.4, 8, 8, 24);
   });
 }
 
-function starShape(outer: number, inner: number) {
+/** White sticker on the folder cover, with a big pink heart + HI. */
+function folderSticker() {
+  return canvasTex(256, 104, (g) => {
+    g.fillStyle = '#fffdf7';
+    roundRect(g, 2, 2, 252, 100, 18);
+    g.fill();
+    g.strokeStyle = P.pink;
+    g.lineWidth = 5;
+    roundRect(g, 7, 7, 242, 90, 14);
+    g.stroke();
+
+    g.fillStyle = P.pinkDeep;
+    const hx = 56;
+    const hy = 46;
+    g.beginPath();
+    g.arc(hx - 12, hy, 13, 0, Math.PI * 2);
+    g.arc(hx + 12, hy, 13, 0, Math.PI * 2);
+    g.fill();
+    g.beginPath();
+    g.moveTo(hx - 24, hy + 2);
+    g.lineTo(hx, hy + 32);
+    g.lineTo(hx + 24, hy + 2);
+    g.closePath();
+    g.fill();
+
+    g.fillStyle = P.ink;
+    g.font = '800 54px "Helvetica Neue", Arial, sans-serif';
+    g.textAlign = 'left';
+    g.textBaseline = 'middle';
+    g.fillText('HI', 94, 50);
+    g.fillStyle = P.azureDeep;
+    g.font = '800 22px "Helvetica Neue", Arial, sans-serif';
+    g.fillText('DAVIDE.FYI', 152, 54);
+  });
+}
+
+/** Magic-ball face: white disc, big wink + smile. */
+function ballFace() {
+  return canvasTex(256, 256, (g) => {
+    g.clearRect(0, 0, 256, 256);
+    g.fillStyle = '#fffdf7';
+    g.beginPath();
+    g.arc(128, 128, 118, 0, Math.PI * 2);
+    g.fill();
+
+    g.strokeStyle = '#e5dcc8';
+    g.lineWidth = 7;
+    g.beginPath();
+    g.arc(128, 128, 112, 0, Math.PI * 2);
+    g.stroke();
+
+    const ink = '#3a2c4a';
+    g.fillStyle = ink;
+    // eyes: one open, one winking
+    g.beginPath();
+    g.arc(92, 112, 18, 0, Math.PI * 2);
+    g.fill();
+    g.lineWidth = 14;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(140, 114);
+    g.lineTo(180, 104);
+    g.stroke();
+    // big smile
+    g.lineWidth = 16;
+    g.beginPath();
+    g.arc(128, 140, 52, 0.14 * Math.PI, 0.86 * Math.PI);
+    g.stroke();
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* shapes                                                              */
+/* ------------------------------------------------------------------ */
+
+/** Rounded folder outline with a tab on the top-left. */
+function folderShape(w: number, h: number, tabW: number, tabH: number, r: number) {
+  const tr = Math.min(0.006, tabH * 0.45, tabW * 0.3);
   const s = new THREE.Shape();
-  for (let i = 0; i < 10; i++) {
-    const r = i % 2 === 0 ? outer : inner;
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const x = Math.cos(a) * r;
-    const y = Math.sin(a) * r;
-    if (i === 0) s.moveTo(x, y);
-    else s.lineTo(x, y);
-  }
+  s.moveTo(-w / 2 + r, -h / 2);
+  s.lineTo(w / 2 - r, -h / 2);
+  s.quadraticCurveTo(w / 2, -h / 2, w / 2, -h / 2 + r);
+  s.lineTo(w / 2, h / 2 - r);
+  s.quadraticCurveTo(w / 2, h / 2, w / 2 - r, h / 2);
+  s.lineTo(-w / 2 + tabW, h / 2);
+  s.lineTo(-w / 2 + tabW, h / 2 + tabH - tr);
+  s.quadraticCurveTo(-w / 2 + tabW, h / 2 + tabH, -w / 2 + tabW - tr, h / 2 + tabH);
+  s.lineTo(-w / 2 + tr, h / 2 + tabH);
+  s.quadraticCurveTo(-w / 2, h / 2 + tabH, -w / 2, h / 2 + tabH - tr);
+  s.lineTo(-w / 2, -h / 2 + r);
+  s.quadraticCurveTo(-w / 2, -h / 2, -w / 2 + r, -h / 2);
   s.closePath();
   return s;
 }
 
+/** 3.5" floppy outline: clipped top-right corner. */
+function floppyShape(w: number, clip: number) {
+  const s = new THREE.Shape();
+  s.moveTo(-w / 2, w / 2);
+  s.lineTo(w / 2 - clip, w / 2);
+  s.lineTo(w / 2, w / 2 - clip);
+  s.lineTo(w / 2, -w / 2);
+  s.lineTo(-w / 2, -w / 2);
+  s.closePath();
+  return s;
+}
+
+/** Cartridge outline with chamfered top corners. */
+function cartridgeShape(w: number, h: number, chamfer: number) {
+  const s = new THREE.Shape();
+  s.moveTo(-w / 2, -h / 2);
+  s.lineTo(w / 2, -h / 2);
+  s.lineTo(w / 2, h / 2 - chamfer);
+  s.lineTo(w / 2 - chamfer, h / 2);
+  s.lineTo(-w / 2 + chamfer, h / 2);
+  s.lineTo(-w / 2, h / 2 - chamfer);
+  s.closePath();
+  return s;
+}
+
+function extrude(shape: THREE.Shape, depth: number, bevel = 0.0012) {
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: true,
+    bevelThickness: bevel,
+    bevelSize: bevel,
+    bevelSegments: 2,
+    curveSegments: 10,
+  });
+  geo.center();
+  return geo;
+}
+
+/** Curved decal patch on a sphere, centred on +Z. */
+function spherePatch(r: number, span = 0.9) {
+  return new THREE.SphereGeometry(
+    r,
+    28,
+    20,
+    Math.PI / 2 - span / 2,
+    span,
+    Math.PI / 2 - span / 2,
+    span
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* public: max top offset per toy (metres, above the toy origin)       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Max Y extent of each toy above its own origin. Capsule placement can use
+ * this to guarantee the prize stays inside the shell: all values are <= 0.06.
+ * Kept in sync with the geometry below (verified with Box3).
+ */
+export const TOY_TOP: Record<Toy, number> = {
+  pocketpet: 0.059,
+  handheld: 0.056,
+  floppy: 0.043,
+  charm: 0.056,
+  cartridge: 0.044,
+  ball: 0.037,
+};
+
+/* ------------------------------------------------------------------ */
+/* toys                                                                */
+/* ------------------------------------------------------------------ */
+
 /** Prize miniature, sized to fit through the capsule mouth (6–8 cm). */
 export function makeToy(kind: Toy, color: string): THREE.Group {
   const g = new THREE.Group();
-  const shell = plastic(color, { roughness: 0.15, clearcoatRoughness: 0.03 });
-  const dark = plastic('#1b1e24', { roughness: 0.2, clearcoatRoughness: 0.04 });
+  const gloss = (c: string, opts: Partial<THREE.MeshPhysicalMaterialParameters> = {}) =>
+    plastic(c, {
+      roughness: 0.14,
+      clearcoat: 1,
+      clearcoatRoughness: 0.035,
+      envMapIntensity: 1.4,
+      ior: 1.46,
+      ...opts,
+    });
 
   if (kind === 'pocketpet') {
-    // egg-shaped pocket pet
-    const R = 0.0335;
-    const H = 0.074;
+    // pink egg, big white faceplate, mint LCD with a bold pixel smile
+    const R = 0.036;
+    const H = 0.1;
     const pts: THREE.Vector2[] = [];
-    for (let i = 0; i <= 20; i++) {
-      const t = i / 20;
-      const r = R * Math.pow(Math.sin(Math.PI * t), 0.62) * (1 - 0.17 * t);
-      pts.push(new THREE.Vector2(Math.max(r, 0.0004), (t - 0.5) * H));
+    for (let i = 0; i <= 26; i++) {
+      const t = i / 26;
+      const r = R * Math.pow(Math.sin(Math.PI * t), 0.58) * (1 - 0.1 * t);
+      pts.push(new THREE.Vector2(Math.max(r, 0.0005), (t - 0.5) * H));
     }
-    const body = new THREE.Mesh(new THREE.LatheGeometry(pts, 36), shell);
+    const body = new THREE.Mesh(new THREE.LatheGeometry(pts, 40), gloss(P.pink));
+    body.scale.z = 0.72; // flattened front, so the faceplate can sit flush
     body.castShadow = true;
     g.add(body);
 
-    const bezel = new THREE.Mesh(new RoundedBoxGeometry(0.038, 0.028, 0.014, 3, 0.005), dark);
-    bezel.position.set(0, 0.001, 0.0225);
+    const facePlate = new THREE.Mesh(
+      new RoundedBoxGeometry(0.044, 0.042, 0.008, 3, 0.014),
+      gloss(P.cream, { roughness: 0.18 })
+    );
+    facePlate.position.set(0, 0.009, 0.023);
+    g.add(facePlate);
+
+    const bezel = new THREE.Mesh(
+      new RoundedBoxGeometry(0.038, 0.032, 0.005, 3, 0.009),
+      gloss(P.plum, { roughness: 0.2 })
+    );
+    bezel.position.set(0, 0.009, 0.027);
     g.add(bezel);
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.0295, 0.0205), screenMat(pocketScreen()));
-    screen.position.set(0, 0.001, 0.0299);
+
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.032, 0.026), screenMat(pocketScreen(), 1.35));
+    screen.position.set(0, 0.009, 0.0302);
     g.add(screen);
 
+    const buttonColors = [P.pinkDeep, P.mint, P.yellow];
     for (let i = 0; i < 3; i++) {
-      const b = new THREE.Mesh(new THREE.SphereGeometry(0.0038, 12, 8), chrome());
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.0052, 12, 10), gloss(buttonColors[i], { roughness: 0.16 }));
       b.scale.set(1, 1, 0.55);
-      b.position.set(-0.011 + i * 0.011, -0.019, i === 1 ? 0.0255 : 0.0232);
+      b.position.set(-0.014 + i * 0.014, -0.027, 0.0215);
       g.add(b);
     }
 
-    const loop = new THREE.Mesh(new THREE.TorusGeometry(0.0062, 0.0017, 8, 18), chrome());
-    loop.position.set(0, 0.0385, 0);
-    g.add(loop);
-    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.006, 8), chrome());
-    neck.position.set(0, 0.0345, 0);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.0026, 0.0026, 0.008, 10), chrome());
+    neck.position.set(0, 0.0515, 0);
     g.add(neck);
+    const loop = new THREE.Mesh(new THREE.TorusGeometry(0.006, 0.0017, 8, 18), chrome());
+    loop.position.set(0, 0.0505, 0);
+    g.add(loop);
   } else if (kind === 'handheld') {
-    const body = new THREE.Mesh(new RoundedBoxGeometry(0.066, 0.094, 0.016, 4, 0.009), shell);
+    // chunky pastel handheld: large sunny screen, fat D-pad and A/B buttons
+    const body = new THREE.Mesh(
+      new RoundedBoxGeometry(0.072, 0.104, 0.018, 4, 0.013),
+      gloss(P.azure)
+    );
     body.castShadow = true;
     g.add(body);
 
-    const bezel = new THREE.Mesh(new RoundedBoxGeometry(0.052, 0.044, 0.005, 3, 0.003), dark);
-    bezel.position.set(0, 0.0145, 0.0095);
+    const bezel = new THREE.Mesh(
+      new RoundedBoxGeometry(0.058, 0.046, 0.006, 3, 0.006),
+      gloss('#28324a', { roughness: 0.2 })
+    );
+    bezel.position.set(0, 0.02, 0.0098);
     g.add(bezel);
-    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.043, 0.034), screenMat(handheldScreen()));
-    screen.position.set(0, 0.015, 0.0122);
+
+    const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 0.038), screenMat(handheldScreen(), 1.18));
+    screen.position.set(0, 0.02, 0.0132);
     g.add(screen);
 
-    // power led
-    const led = new THREE.Mesh(new THREE.SphereGeometry(0.0018, 8, 6), glow('#55ff9a', 2.4));
-    led.position.set(-0.0255, 0.0368, 0.0092);
+    const led = new THREE.Mesh(new THREE.SphereGeometry(0.0024, 8, 6), glow('#55ff9a', 2.6));
+    led.position.set(-0.027, 0.045, 0.0094);
     g.add(led);
 
-    // d-pad
-    const dpadMat = plastic('#242830', { roughness: 0.28 });
-    const dh = new THREE.Mesh(new RoundedBoxGeometry(0.021, 0.0078, 0.0038, 2, 0.002), dpadMat);
-    dh.position.set(-0.0195, -0.0285, 0.0092);
+    const dpadMat = gloss(P.plum, { roughness: 0.22 });
+    const dh = new THREE.Mesh(new RoundedBoxGeometry(0.026, 0.009, 0.005, 2, 0.003), dpadMat);
+    dh.position.set(-0.021, -0.032, 0.0102);
     g.add(dh);
-    const dv = new THREE.Mesh(new RoundedBoxGeometry(0.0078, 0.021, 0.0038, 2, 0.002), dpadMat);
-    dv.position.set(-0.0195, -0.0285, 0.0092);
+    const dv = new THREE.Mesh(new RoundedBoxGeometry(0.009, 0.026, 0.005, 2, 0.003), dpadMat);
+    dv.position.set(-0.021, -0.032, 0.0102);
     g.add(dv);
 
-    // A / B buttons
-    const ba = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.006, 0.006, 0.004, 16),
-      plastic('#e8384f', { roughness: 0.16 })
-    );
+    const ba = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.005, 18), gloss(P.pinkDeep));
     ba.rotation.x = Math.PI / 2;
-    ba.position.set(0.0145, -0.0225, 0.0105);
+    ba.position.set(0.013, -0.026, 0.012);
     g.add(ba);
-    const bb = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.006, 0.006, 0.004, 16),
-      plastic('#ffc21a', { roughness: 0.16 })
-    );
+    const bb = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.005, 18), gloss(P.yellow));
     bb.rotation.x = Math.PI / 2;
-    bb.position.set(0.0275, -0.0315, 0.0105);
+    bb.position.set(0.031, -0.037, 0.012);
     g.add(bb);
 
-    // start / select
     for (let i = 0; i < 2; i++) {
-      const s = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 0.003, 10), dark);
-      s.rotation.x = Math.PI / 2;
-      s.position.set(0.0035 + i * 0.008, -0.0385, 0.0092);
+      const s = new THREE.Mesh(new RoundedBoxGeometry(0.014, 0.0055, 0.004, 2, 0.002), dpadMat);
+      s.position.set(-0.007 + i * 0.017, -0.0455, 0.0102);
       g.add(s);
     }
 
-    // speaker slots
-    for (let i = 0; i < 4; i++) {
-      const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.0016, 0.0075), dark);
-      slot.position.set(0.0205 + i * 0.004, -0.0385, 0.0086);
-      g.add(slot);
+    for (let i = 0; i < 2; i++) {
+      const sh = new THREE.Mesh(
+        new RoundedBoxGeometry(0.018, 0.006, 0.012, 2, 0.0025),
+        gloss('#6db4f2', { roughness: 0.18 })
+      );
+      sh.position.set(-0.023 + i * 0.046, 0.053, -0.001);
+      g.add(sh);
     }
   } else if (kind === 'floppy') {
+    // azure 3.5" floppy: clipped corner, chrome shutter, fat printed label
+    const w = 0.082;
     const body = new THREE.Mesh(
-      new RoundedBoxGeometry(0.076, 0.076, 0.005, 3, 0.0035),
-      plastic('#26282d', { roughness: 0.34, clearcoat: 0.7, clearcoatRoughness: 0.12 })
+      extrude(floppyShape(w, 0.013), 0.007, 0.001),
+      gloss(P.azure, { roughness: 0.15 })
     );
     body.castShadow = true;
     g.add(body);
 
-    const label = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.058, 0.05),
-      new THREE.MeshStandardMaterial({ map: floppyLabel(color), roughness: 0.72, metalness: 0 })
-    );
-    label.position.set(0, -0.0105, 0.0028);
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 0.048), printMat(floppyLabel(P.azureDeep)));
+    label.position.set(-0.002, -0.009, 0.0046);
     g.add(label);
 
-    const shutter = new THREE.Mesh(
-      new RoundedBoxGeometry(0.028, 0.0215, 0.0018, 2, 0.0012),
-      chrome()
-    );
-    shutter.position.set(0.012, 0.0272, 0.0029);
+    const shutter = new THREE.Mesh(new RoundedBoxGeometry(0.028, 0.021, 0.002, 2, 0.0014), chrome());
+    shutter.position.set(0.014, 0.026, 0.0044);
     g.add(shutter);
-    const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.013, 0.0042), dark);
-    slot.position.set(0.0145, 0.0305, 0.004);
+
+    const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.013, 0.005), gloss(P.plum, { roughness: 0.3 }));
+    slot.position.set(0.017, 0.029, 0.0055);
     g.add(slot);
 
-    // write-protect notch
-    const notch = new THREE.Mesh(new THREE.PlaneGeometry(0.006, 0.004), dark);
-    notch.position.set(-0.031, -0.0335, 0.0027);
+    // write-protect notch, cut into the top-left edge
+    const notch = new THREE.Mesh(new RoundedBoxGeometry(0.008, 0.008, 0.004, 2, 0.001), gloss(P.plum, { roughness: 0.3 }));
+    notch.position.set(-0.034, 0.032, 0.002);
     g.add(notch);
   } else if (kind === 'charm') {
-    // opaca di proposito: un materiale transmissivo verrebbe escluso
-    // dal transmission buffer della calotta e sparirebbe dentro la capsula
-    const acrylic = new THREE.MeshPhysicalMaterial({
-      color,
-      metalness: 0.04,
-      roughness: 0.055,
-      clearcoat: 1,
-      clearcoatRoughness: 0.03,
-      envMapIntensity: 1.6,
-      iridescence: 0.55,
-      iridescenceIOR: 1.3,
-      iridescenceThicknessMinimum: 120,
-      iridescenceThicknessMaximum: 380,
-    });
-    const starGeo = new THREE.ExtrudeGeometry(starShape(0.033, 0.0155), {
-      depth: 0.005,
-      bevelEnabled: true,
-      bevelThickness: 0.0012,
-      bevelSize: 0.0012,
-      bevelSegments: 2,
-      curveSegments: 2,
-    });
-    starGeo.center();
-    const star = new THREE.Mesh(starGeo, acrylic);
-    star.rotation.z = 0.05;
-    g.add(star);
-
-    const printGeo = new THREE.ShapeGeometry(starShape(0.0145, 0.0065));
-    const print = new THREE.Mesh(
-      printGeo,
-      new THREE.MeshStandardMaterial({ color: '#fffaf0', roughness: 0.4, metalness: 0 })
+    // pink folder, white sheets clearly peeking out under a rounded tab
+    const back = new THREE.Mesh(
+      extrude(folderShape(0.074, 0.084, 0.03, 0.018, 0.006), 0.0044, 0.0008),
+      gloss(P.pink)
     );
-    print.position.set(0, 0, 0.0042);
-    print.rotation.z = 0.05;
-    g.add(print);
+    back.castShadow = true;
+    g.add(back);
 
-    const jump = new THREE.Mesh(new THREE.TorusGeometry(0.0058, 0.0016, 8, 20), chrome());
-    jump.position.set(0, 0.0305, 0);
-    g.add(jump);
+    // two loose sheets, the top one offset and slightly rotated
+    const sheet = new THREE.Mesh(
+      new RoundedBoxGeometry(0.048, 0.07, 0.0018, 2, 0.003),
+      gloss(P.cream, { roughness: 0.5 })
+    );
+    sheet.position.set(0.012, 0.011, 0.0017);
+    g.add(sheet);
+
+    const sheet2 = new THREE.Mesh(
+      new RoundedBoxGeometry(0.046, 0.064, 0.0016, 2, 0.003),
+      gloss(P.cream, { roughness: 0.55 })
+    );
+    sheet2.position.set(0.004, 0.009, 0.0006);
+    sheet2.rotation.z = -0.03;
+    g.add(sheet2);
+
+    // two bold printed lines on the visible strip of paper
+    for (let i = 0; i < 2; i++) {
+      const line = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.032 - i * 0.008, 0.004),
+        gloss('#cfc3ad', { roughness: 0.6 })
+      );
+      line.position.set(0.014, 0.039 - i * 0.008, 0.0028);
+      g.add(line);
+    }
+
+    const cover = new THREE.Mesh(
+      new RoundedBoxGeometry(0.066, 0.062, 0.0046, 3, 0.005),
+      gloss(P.pinkDeep)
+    );
+    cover.position.set(0, -0.018, 0.006);
+    g.add(cover);
+
+    const sticker = new THREE.Mesh(new THREE.PlaneGeometry(0.042, 0.017), printMat(folderSticker()));
+    sticker.position.set(-0.004, -0.02, 0.0084);
+    g.add(sticker);
+
+    const eyelet = new THREE.Mesh(new THREE.TorusGeometry(0.0044, 0.0013, 6, 16), chrome());
+    eyelet.position.set(-0.021, 0.048, 0);
+    g.add(eyelet);
   } else if (kind === 'cartridge') {
-    const body = new THREE.Mesh(new RoundedBoxGeometry(0.07, 0.076, 0.016, 3, 0.006), shell);
+    // yellow ZORA cartridge, magenta label, gold edge
+    const body = new THREE.Mesh(
+      extrude(cartridgeShape(0.072, 0.084, 0.011), 0.014, 0.0014),
+      gloss(P.yellow, { roughness: 0.15 })
+    );
     body.castShadow = true;
     g.add(body);
 
-    // top grip ridge
-    const grip = new THREE.Mesh(
-      new RoundedBoxGeometry(0.036, 0.006, 0.003, 2, 0.0015),
-      plastic(color, { roughness: 0.25 })
-    );
-    grip.position.set(0, 0.0335, 0.0082);
-    g.add(grip);
+    for (let i = 0; i < 3; i++) {
+      const grip = new THREE.Mesh(
+        new RoundedBoxGeometry(0.034, 0.004, 0.002, 2, 0.0015),
+        gloss(P.yellowDeep, { roughness: 0.22 })
+      );
+      grip.position.set(0, 0.032 - i * 0.0062, 0.0092);
+      g.add(grip);
+    }
 
-    const label = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.056, 0.05),
-      new THREE.MeshStandardMaterial({ map: cartLabel(color), roughness: 0.5, metalness: 0 })
-    );
-    label.position.set(0, 0.004, 0.0086);
+    const label = new THREE.Mesh(new THREE.PlaneGeometry(0.058, 0.054), printMat(cartLabel()));
+    label.position.set(0, 0.001, 0.0098);
     g.add(label);
 
-    const edge = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.052, 0.009),
-      new THREE.MeshStandardMaterial({ map: cartEdge(), roughness: 0.4, metalness: 0.5 })
-    );
-    edge.position.set(0, -0.032, 0.0086);
+    const edge = new THREE.Mesh(new THREE.PlaneGeometry(0.054, 0.011), printMat(cartEdge()));
+    edge.position.set(0, -0.0365, 0.0092);
     g.add(edge);
+
+    const notch = new THREE.Mesh(new RoundedBoxGeometry(0.01, 0.007, 0.002, 2, 0.001), gloss(P.yellowDeep, { roughness: 0.3 }));
+    notch.position.set(0.026, 0.036, 0.0092);
+    g.add(notch);
   } else {
-    // oracle ball: glossy lacquer with emissive constellation
+    // Oracle: glossy lilac magic ball with a big winking face
+    const r = 0.037;
     const ball = new THREE.Mesh(
-      new THREE.SphereGeometry(0.034, 36, 24),
-      new THREE.MeshPhysicalMaterial({
-        color: '#0a0a0e',
-        roughness: 0.055,
-        metalness: 0.12,
-        clearcoat: 1,
-        clearcoatRoughness: 0.025,
-        envMapIntensity: 1.5,
-      })
+      new THREE.SphereGeometry(r, 40, 28),
+      gloss('#b49cff', { roughness: 0.17, clearcoatRoughness: 0.05, envMapIntensity: 1.2 })
     );
     ball.castShadow = true;
     g.add(ball);
 
-    const dots: THREE.BufferGeometry[] = [];
-    const n = 9;
-    const front = new THREE.Vector3(0, 0, 1);
-    for (let i = 0; i < n; i++) {
-      const y = 1 - (i / (n - 1)) * 2;
-      const rad = Math.sqrt(Math.max(0, 1 - y * y));
-      const a = i * 2.399963;
-      const dir = new THREE.Vector3(Math.cos(a) * rad, y, Math.sin(a) * rad).normalize();
-      const size = 0.0022 + (i % 3) * 0.00055;
-      const dot = new THREE.CircleGeometry(size, 12);
-      const q = new THREE.Quaternion().setFromUnitVectors(front, dir);
-      const m = new THREE.Matrix4().compose(
-        dir.clone().multiplyScalar(0.03405),
-        q,
-        new THREE.Vector3(1, 1, 1)
-      );
-      dot.applyMatrix4(m);
-      dots.push(dot);
-    }
-    const dotMesh = new THREE.Mesh(
-      mergeGeometries(dots, false)!,
-      new THREE.MeshBasicMaterial({ color, toneMapped: false })
+    const face = new THREE.Mesh(
+      spherePatch(r * 1.004, 1.15),
+      new THREE.MeshStandardMaterial({
+        map: ballFace(),
+        transparent: true,
+        roughness: 0.28,
+        metalness: 0,
+        depthWrite: false,
+      })
     );
-    g.add(dotMesh);
+    g.add(face);
   }
 
+  // project tint stays available for future palette variants
+  g.userData.tint = color;
   return g;
 }

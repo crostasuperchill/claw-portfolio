@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { CAB, backlit, candy, chrome, glow, matte, printed, rubber } from './materials';
+import { CAB, backlit, candy, chrome, glow, matte, plastic, printed, rubber } from './materials';
 import { decalMesh } from './decals';
 import type { UvRect } from '../contracts';
 
@@ -610,27 +610,14 @@ export function bodyTexture() {
 
   drawStar(g, 640, 300, 18, '#b28cff');
 
-  // right: cat mascot + blue badge
+  // right: cat mascot
   drawCat(g, 852, 168, 1.02);
 
+  // red/white warning, tucked between the prize door and the coin door
   g.save();
-  g.translate(770, 372);
-  g.fillStyle = '#5aa9e6';
-  g.beginPath();
-  g.arc(0, 0, 46, 0, Math.PI * 2);
-  g.fill();
-  g.strokeStyle = '#ffffff';
-  g.lineWidth = 6;
-  g.beginPath();
-  g.arc(0, 0, 42, 0, Math.PI * 2);
-  g.stroke();
-  drawUfo(g, 0, 0, 0.34, false);
-  g.restore();
-
-  // red/white warning, bottom-right
-  g.save();
-  g.translate(930, 414);
-  g.rotate(0.07);
+  g.translate(662, 414);
+  g.rotate(0.06);
+  g.scale(0.92, 0.92);
   g.shadowColor = 'rgba(60,10,20,0.22)';
   g.shadowBlur = 10;
   g.shadowOffsetY = 4;
@@ -656,7 +643,7 @@ export function bodyTexture() {
   g.fillStyle = 'rgba(80,60,70,0.5)';
   g.font = `700 15px ${ROUND}`;
   g.textAlign = 'left';
-  g.fillText('MADE IN JAPAN', 380, 492);
+  g.fillText('MADE IN JAPAN', 508, 492);
   g.textAlign = 'right';
   g.fillText('UFO-1024 / 220V', 990, 492);
 
@@ -876,14 +863,14 @@ function innerShadowTexture() {
   const c = canvas(256, 256);
   const g = c.getContext('2d')!;
   const lg = g.createLinearGradient(0, 0, 0, 256);
-  lg.addColorStop(0, 'rgba(8,4,6,0.92)');
-  lg.addColorStop(0.35, 'rgba(8,4,6,0.55)');
-  lg.addColorStop(0.72, 'rgba(8,4,6,0.22)');
-  lg.addColorStop(1, 'rgba(8,4,6,0.65)');
+  lg.addColorStop(0, 'rgba(4,2,4,0.97)');
+  lg.addColorStop(0.35, 'rgba(4,2,4,0.7)');
+  lg.addColorStop(0.72, 'rgba(4,2,4,0.34)');
+  lg.addColorStop(1, 'rgba(4,2,4,0.82)');
   g.fillStyle = lg;
   g.fillRect(0, 0, 256, 256);
   const rg = g.createRadialGradient(70, 60, 8, 70, 60, 160);
-  rg.addColorStop(0, 'rgba(255,220,190,0.22)');
+  rg.addColorStop(0, 'rgba(255,220,190,0.1)');
   rg.addColorStop(1, 'rgba(255,220,190,0)');
   g.fillStyle = rg;
   g.fillRect(0, 0, 256, 256);
@@ -901,6 +888,232 @@ function streakTexture() {
   g.fillStyle = lg;
   g.fillRect(0, 0, 256, 32);
   return texture(c);
+}
+
+/* ------------------------------------------------------------------ */
+/* small hardware maps                                                 */
+/* ------------------------------------------------------------------ */
+
+let screwHead: THREE.Texture | null = null;
+
+/** machined screw head with a cross recess (the whole point of a screw) */
+function screwHeadTexture() {
+  if (screwHead) return screwHead;
+  const c = canvas(128, 128);
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(48, 40, 3, 64, 64, 63);
+  grad.addColorStop(0, '#ffffff');
+  grad.addColorStop(0.5, '#cdd3da');
+  grad.addColorStop(0.86, '#9aa1aa');
+  grad.addColorStop(1, '#727984');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(64, 64, 62, 0, Math.PI * 2);
+  g.fill();
+
+  // rolled edge
+  g.strokeStyle = 'rgba(58,64,72,0.8)';
+  g.lineWidth = 5;
+  g.beginPath();
+  g.arc(64, 64, 58, 0, Math.PI * 2);
+  g.stroke();
+
+  g.save();
+  g.translate(64, 64);
+  g.rotate(0.09);
+  g.fillStyle = 'rgba(26,28,32,0.96)';
+  roundRect(g, -43, -8, 86, 16, 6);
+  g.fill();
+  roundRect(g, -8, -43, 16, 86, 6);
+  g.fill();
+  // lit lip inside the recess
+  g.fillStyle = 'rgba(255,255,255,0.45)';
+  roundRect(g, -41, 4, 82, 3.5, 2);
+  g.fill();
+  roundRect(g, 4, -41, 3.5, 82, 2);
+  g.fill();
+  g.restore();
+
+  screwHead = texture(c);
+  screwHead.anisotropy = 8;
+  return screwHead;
+}
+
+let perfMask: THREE.Texture | null = null;
+
+/** perforated steel: dark holes in a brushed plate */
+function perforationTexture() {
+  if (perfMask) return perfMask;
+  const c = canvas(256, 256);
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#2b2e35';
+  g.fillRect(0, 0, 256, 256);
+
+  // brushed streaks
+  for (let i = 0; i < 500; i++) {
+    const y = Math.random() * 256;
+    const v = 60 + Math.random() * 70;
+    g.strokeStyle = `rgba(${v},${v + 4},${v + 10},0.18)`;
+    g.beginPath();
+    g.moveTo(0, y);
+    g.lineTo(256, y + (Math.random() - 0.5) * 2);
+    g.stroke();
+  }
+
+  for (let row = 0; row < 16; row++) {
+    for (let col = 0; col < 16; col++) {
+      const x = 8 + col * 16 + (row % 2) * 8;
+      const y = 8 + row * 16;
+      g.beginPath();
+      g.arc(x, y, 4.6, 0, Math.PI * 2);
+      g.fillStyle = '#05060a';
+      g.fill();
+      g.beginPath();
+      g.arc(x, y + 1.4, 3.2, 0, Math.PI * 2);
+      g.fillStyle = 'rgba(190,205,220,0.16)';
+      g.fill();
+    }
+  }
+
+  perfMask = texture(c);
+  perfMask.wrapS = perfMask.wrapT = THREE.RepeatWrapping;
+  perfMask.repeat.set(2, 2);
+  perfMask.anisotropy = 8;
+  return perfMask;
+}
+
+let keyholeFace: THREE.Texture | null = null;
+
+/** brass key cylinder face with a real keyway */
+function keyholeTexture() {
+  if (keyholeFace) return keyholeFace;
+  const c = canvas(128, 128);
+  const g = c.getContext('2d')!;
+  const grad = g.createRadialGradient(46, 40, 4, 64, 64, 62);
+  grad.addColorStop(0, '#f6f3ea');
+  grad.addColorStop(0.55, '#cdc5ae');
+  grad.addColorStop(1, '#948b74');
+  g.fillStyle = grad;
+  g.beginPath();
+  g.arc(64, 64, 62, 0, Math.PI * 2);
+  g.fill();
+  g.strokeStyle = 'rgba(70,62,48,0.65)';
+  g.lineWidth = 4;
+  g.beginPath();
+  g.arc(64, 64, 57, 0, Math.PI * 2);
+  g.stroke();
+
+  g.fillStyle = '#17120c';
+  g.beginPath();
+  g.arc(64, 54, 12, 0, Math.PI * 2);
+  g.fill();
+  g.beginPath();
+  g.moveTo(58, 62);
+  g.lineTo(70, 62);
+  g.lineTo(67, 92);
+  g.lineTo(61, 92);
+  g.closePath();
+  g.fill();
+
+  keyholeFace = texture(c);
+  keyholeFace.anisotropy = 8;
+  return keyholeFace;
+}
+
+let ledFace: THREE.Texture | null = null;
+
+/** 3-digit seven-segment credit display behind smoked glass */
+function ledDisplayTexture() {
+  if (ledFace) return ledFace;
+  const W = 320;
+  const H = 128;
+  const c = canvas(W, H);
+  const g = c.getContext('2d')!;
+
+  const bg = g.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#12090b');
+  bg.addColorStop(0.6, '#070405');
+  bg.addColorStop(1, '#0d0507');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, W, H);
+
+  // glass sheen
+  const sheen = g.createLinearGradient(0, 0, W, H);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.10)');
+  sheen.addColorStop(0.4, 'rgba(255,255,255,0.02)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0.06)');
+  g.fillStyle = sheen;
+  g.fillRect(0, 0, W, H);
+
+  // micro label
+  g.fillStyle = 'rgba(255,120,105,0.55)';
+  g.font = '700 15px "SF Mono", Menlo, monospace';
+  g.textAlign = 'left';
+  g.fillText('CREDIT', 16, 24);
+  g.textAlign = 'right';
+  g.fillText('¥', W - 16, 24);
+
+  const seg = (x: number, y: number, w: number, h: number, r: number, on: boolean) => {
+    g.save();
+    if (on) {
+      g.shadowColor = 'rgba(255,42,20,0.85)';
+      g.shadowBlur = 14;
+    }
+    g.fillStyle = on ? '#ff351d' : 'rgba(255,60,40,0.075)';
+    roundRect(g, x, y, w, h, r);
+    g.fill();
+    g.restore();
+  };
+
+  const digit = (x: number, y: number, w: number, h: number) => {
+    const t = Math.max(6, w * 0.16);
+    const gap = t * 0.55;
+    const half = (h - t * 1.6) / 2;
+    // a top, b top-right, c bottom-right, d bottom, e bottom-left, f top-left, g middle
+    seg(x + gap, y, w - gap * 2, t, t / 2, true);
+    seg(x + w - t, y + gap, t, half - gap, t / 2, true);
+    seg(x + w - t, y + half + gap, t, half - gap, t / 2, true);
+    seg(x + gap, y + h - t, w - gap * 2, t, t / 2, true);
+    seg(x, y + half + gap, t, half - gap, t / 2, true);
+    seg(x, y + gap, t, half - gap, t / 2, true);
+    seg(x + gap, y + half - t / 2, w - gap * 2, t, t / 2, false);
+  };
+
+  const dw = 62;
+  const dh = 86;
+  const gapD = 18;
+  const total = dw * 3 + gapD * 2;
+  let x = (W - total) / 2;
+  for (let i = 0; i < 3; i++) {
+    digit(x, 30, dw, dh);
+    x += dw + gapD;
+  }
+
+  // scanlines
+  g.globalAlpha = 0.16;
+  g.fillStyle = '#000000';
+  for (let y = 0; y < H; y += 3) g.fillRect(0, y, W, 1);
+  g.globalAlpha = 1;
+
+  ledFace = texture(c);
+  ledFace.anisotropy = 8;
+  return ledFace;
+}
+
+/** soft contact shadow used under overhangs */
+let aoTex: THREE.Texture | null = null;
+function aoTexture() {
+  if (aoTex) return aoTex;
+  const c = canvas(64, 64);
+  const g = c.getContext('2d')!;
+  const grad = g.createLinearGradient(0, 0, 0, 64);
+  grad.addColorStop(0, 'rgba(24,10,18,0.55)');
+  grad.addColorStop(0.55, 'rgba(24,10,18,0.18)');
+  grad.addColorStop(1, 'rgba(24,10,18,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  aoTex = texture(c);
+  return aoTex;
 }
 
 /* ------------------------------------------------------------------ */
@@ -966,7 +1179,15 @@ function label(
 ) {
   const rect = rects[name];
   if (!rect) return null;
-  const m = decalMesh(atlas, rect, w, h, { opacity: 0.98, gloss: true });
+  // never stretch the print: fit the quad to the atlas rect's real aspect
+  const aspect = rect.w / rect.h;
+  let dw = w;
+  let dh = h;
+  if (Math.abs(w / h - aspect) / aspect > 0.01) {
+    if (w / h > aspect) dw = h * aspect;
+    else dh = w / aspect;
+  }
+  const m = decalMesh(atlas, rect, dw, dh, { opacity: 0.98, gloss: true });
   m.position.set(x, y, z);
   m.rotation.set(0, rotY, rotZ);
   parent.add(m);
@@ -996,6 +1217,87 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   const chromeMat = chrome();
   const glass = glassMaterial();
 
+  /* ---------------- mechanical kit ---------------- */
+
+  const seamMat = matte('#2a1a24');
+  const steel = plastic('#e4e8ee', { metalness: 0.95, roughness: 0.24 });
+  // satin metal that still reads bright on a vertical face: a pure metal
+  // only mirrors the dark front of the HDRI and turns into a black hole
+  const chromeSoft = plastic('#e9edf2', { metalness: 0.45, roughness: 0.24, clearcoat: 0.9, clearcoatRoughness: 0.1 });
+  const brushed = plastic('#c8cdd4', { metalness: 0.5, roughness: 0.38, clearcoat: 0.5, clearcoatRoughness: 0.2 });
+  const screwFace = plastic('#f2f5f8', { metalness: 0.96, roughness: 0.18, map: screwHeadTexture() });
+  const darkPlate = plastic('#24262c', { metalness: 0.6, roughness: 0.42, clearcoat: 0.35 });
+  const perfMat = plastic('#ffffff', { metalness: 0.5, roughness: 0.4, map: perforationTexture() });
+  const keyFace = plastic('#f4f1e8', { metalness: 0.9, roughness: 0.2, map: keyholeTexture() });
+  const ledGlass = printed(ledDisplayTexture(), {
+    emissive: new THREE.Color('#ffffff'),
+    emissiveMap: ledDisplayTexture(),
+    emissiveIntensity: 1.05,
+    roughness: 0.14,
+    clearcoat: 1,
+    clearcoatRoughness: 0.02,
+    envMapIntensity: 1.5,
+  });
+
+  function gapH(parent: THREE.Object3D, w: number, h: number, x: number, y: number, z: number) {
+    return add(parent, new THREE.BoxGeometry(w, h, 0.002), seamMat, x, y, z, false);
+  }
+
+  function gapV(parent: THREE.Object3D, h: number, w: number, x: number, y: number, z: number) {
+    return add(parent, new THREE.BoxGeometry(w, h, 0.002), seamMat, x, y, z, false);
+  }
+
+  /** cross-head machine screw with a washer, facing out of a panel */
+  function screwAt(
+    parent: THREE.Object3D,
+    x: number,
+    y: number,
+    z: number,
+    r = 0.0072,
+    face: 'front' | 'top' | 'left' | 'right' = 'front',
+    spin = 0
+  ) {
+    const grp = new THREE.Group();
+    grp.position.set(x, y, z);
+    if (face === 'top') grp.rotation.x = -Math.PI / 2;
+    else if (face === 'right') grp.rotation.y = Math.PI / 2;
+    else if (face === 'left') grp.rotation.y = -Math.PI / 2;
+    grp.rotateZ(spin);
+
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.9, r * 0.44, 14), chromeMat);
+    head.rotation.x = Math.PI / 2;
+    head.position.z = r * 0.12;
+
+    const washer = new THREE.Mesh(new THREE.TorusGeometry(r * 1.1, r * 0.09, 4, 16), chromeMat);
+    washer.position.z = r * 0.03;
+
+    const cap = new THREE.Mesh(new THREE.CircleGeometry(r * 0.92, 14), screwFace);
+    cap.position.z = r * 0.35;
+
+    for (const m of [head, washer, cap]) {
+      m.castShadow = false;
+      m.receiveShadow = true;
+      grp.add(m);
+    }
+    parent.add(grp);
+    return grp;
+  }
+
+  /** drilled speaker / vent panel */
+  function perfPanel(
+    parent: THREE.Object3D,
+    w: number,
+    h: number,
+    x: number,
+    y: number,
+    z: number,
+    rotY = 0
+  ) {
+    const m = add(parent, new THREE.PlaneGeometry(w, h), perfMat, x, y, z, false);
+    m.rotation.y = rotY;
+    return m;
+  }
+
   /* ---------------- feet + lower body ---------------- */
 
   for (const [x, z] of [
@@ -1004,8 +1306,12 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     [-0.425, -0.3],
     [0.425, -0.3],
   ]) {
-    add(root, new THREE.CylinderGeometry(0.045, 0.052, 0.05, 22), rub, x, 0.025, z);
-    add(root, new THREE.TorusGeometry(0.047, 0.005, 6, 22), chromeMat, x, 0.048, z).rotation.x = Math.PI / 2;
+    // rubber pad, chrome ferrule, levelling nut, steel mounting plate
+    add(root, new THREE.CylinderGeometry(0.047, 0.055, 0.022, 24), rub, x, 0.011, z);
+    add(root, new THREE.CylinderGeometry(0.05, 0.05, 0.003, 24), rub, x, 0.0235, z, false);
+    add(root, new THREE.CylinderGeometry(0.046, 0.048, 0.012, 24), chromeMat, x, 0.031, z);
+    add(root, new THREE.CylinderGeometry(0.024, 0.024, 0.01, 6), chromeMat, x, 0.041, z);
+    add(root, rbox(0.092, 0.007, 0.092, 0.003), brushed, x, 0.0475, z, false);
   }
 
   const plinth = add(root, rbox(1.02, 0.555, 0.78, 0.05), pink, 0, 0.3225, 0);
@@ -1034,6 +1340,121 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   add(root, rbox(0.012, 0.452, 0.012, 0.005), pinkDeep, -0.457, 0.375, 0.395, false);
   add(root, rbox(0.012, 0.452, 0.012, 0.005), pinkDeep, 0.457, 0.375, 0.395, false);
 
+  // shadow gaps where the belly moulding meets the plinth: this is what
+  // breaks the shell into separate moulded panels instead of one blob
+  gapH(root, 0.94, 0.006, 0, 0.5925, 0.4006);
+  gapH(root, 0.94, 0.0055, 0, 0.1445, 0.3912);
+  gapV(root, 0.452, 0.006, -0.4515, 0.375, 0.3912);
+  gapV(root, 0.452, 0.006, 0.4515, 0.375, 0.3912);
+  gapH(root, 1.01, 0.0045, 0, 0.1092, 0.4);
+
+  // belly panel is bolted down: four cross-head screws on the print corners
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      screwAt(root, sx * 0.431, 0.375 + sy * 0.204, 0.4008, 0.0068, 'front', sx * 0.4 + sy * 0.2);
+    }
+  }
+
+  /* ---------------- coin door + credit display ---------------- */
+
+  const coinX = 0.3;
+  const coinY = 0.3;
+  const coinW = 0.17;
+  const coinH = 0.155;
+
+  // chrome backplate, brushed face, chrome retaining frame
+  add(root, rbox(coinW, coinH, 0.007, 0.006), chromeMat, coinX, coinY, 0.4025, false);
+  add(root, rbox(coinW - 0.02, coinH - 0.02, 0.005, 0.004), brushed, coinX, coinY, 0.4064, false);
+  const bez = 0.014;
+  for (const seg of [
+    [coinW, bez, 0, coinH / 2 - bez / 2],
+    [coinW, bez, 0, -coinH / 2 + bez / 2],
+    [bez, coinH - bez * 2, -coinW / 2 + bez / 2, 0],
+    [bez, coinH - bez * 2, coinW / 2 - bez / 2, 0],
+  ]) {
+    add(root, rbox(seg[0], seg[1], 0.011, 0.004), chromeMat, coinX + seg[2], coinY + seg[3], 0.4092, false);
+  }
+
+  // 3-digit red LED credit window
+  add(root, rbox(0.09, 0.038, 0.006, 0.004), matte('#0a0709'), coinX - 0.028, 0.3385, 0.4098, false);
+  add(root, new THREE.PlaneGeometry(0.082, 0.0328), ledGlass, coinX - 0.028, 0.3385, 0.4132, false);
+  add(
+    root,
+    new THREE.PlaneGeometry(0.11, 0.05),
+    new THREE.MeshBasicMaterial({
+      color: '#ff3a22',
+      transparent: true,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+    coinX - 0.028,
+    0.3385,
+    0.4136,
+    false
+  ).renderOrder = 1;
+
+  // coin entry: chrome block, vertical slot, insert-coin lamp
+  add(root, rbox(0.028, 0.056, 0.009, 0.005), chromeMat, coinX + 0.048, 0.336, 0.4105, false);
+  add(root, new THREE.PlaneGeometry(0.005, 0.034), matte('#050407'), coinX + 0.048, 0.336, 0.4153, false);
+  add(root, new THREE.PlaneGeometry(0.0016, 0.032), matte('#241018'), coinX + 0.048, 0.336, 0.4157, false);
+  add(root, new THREE.CylinderGeometry(0.0042, 0.0042, 0.003, 12), glow('#6dffa8', 1.8), coinX + 0.048, 0.372, 0.415, false).rotation.x = Math.PI / 2;
+
+  // key lock (cam lock on the coin door)
+  add(root, new THREE.CylinderGeometry(0.018, 0.018, 0.008, 20), chromeMat, coinX + 0.048, 0.283, 0.4102, false).rotation.x = Math.PI / 2;
+  add(root, new THREE.CircleGeometry(0.0145, 20), keyFace, coinX + 0.048, 0.283, 0.4148, false);
+
+  // coin return button + its bezel
+  add(root, new THREE.CylinderGeometry(0.0125, 0.0135, 0.008, 18), chromeMat, coinX - 0.045, 0.253, 0.4095, false).rotation.x = Math.PI / 2;
+  add(root, new THREE.CylinderGeometry(0.0085, 0.0095, 0.009, 16), plastic(CAB.red, { roughness: 0.4 }), coinX - 0.045, 0.253, 0.413, false).rotation.x = Math.PI / 2;
+
+  // coin return cup below the door
+  add(root, rbox(0.076, 0.038, 0.012, 0.007), chromeMat, coinX - 0.012, 0.199, 0.4018, false);
+  add(root, rbox(0.058, 0.022, 0.004, 0.006), matte('#0a080b'), coinX - 0.012, 0.199, 0.409, false);
+
+  // coin door fixings
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      screwAt(root, coinX + sx * 0.074, coinY + sy * 0.064, 0.4125, 0.0055, 'front', sx * 0.3);
+    }
+  }
+
+  /* ---------------- louvred vents + side speakers ---------------- */
+
+  for (const sx of [-1, 1]) {
+    const vx = sx * 0.335;
+    add(root, rbox(0.165, 0.05, 0.004, 0.005), brushed, vx, 0.076, 0.3975, false);
+    add(root, rbox(0.148, 0.036, 0.003, 0.004), matte('#090709'), vx, 0.076, 0.3995, false);
+    for (let i = 0; i < 4; i++) {
+      add(root, rbox(0.138, 0.0042, 0.003, 0.0018), brushed, vx, 0.076 + (i - 1.5) * 0.0082, 0.4008, false);
+    }
+  }
+
+  for (const sx of [-1, 1]) {
+    // perforated speaker grille on the side of the plinth
+    const grp = new THREE.Group();
+    grp.position.set(sx * 0.5105, 0.47, 0.015);
+    grp.rotation.y = sx * (Math.PI / 2);
+    root.add(grp);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.062, 36), perfMat);
+    disc.receiveShadow = true;
+    grp.add(disc);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.0635, 0.0052, 6, 36), chromeMat);
+    grp.add(ring);
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI * 0.25 + i * (Math.PI / 2);
+      screwAt(grp, Math.cos(a) * 0.0695, Math.sin(a) * 0.0695, 0.0038, 0.0042, 'front');
+    }
+
+    // rear-side air intake louvres
+    for (let i = 0; i < 4; i++) {
+      add(root, new THREE.BoxGeometry(0.004, 0.0055, 0.11), matte('#0a080b'), sx * 0.5105, 0.118 + i * 0.014, -0.16, false);
+    }
+    // panel screws on the flank
+    screwAt(root, sx * 0.511, 0.56, 0.245, 0.0062, sx > 0 ? 'right' : 'left');
+    screwAt(root, sx * 0.511, 0.16, 0.245, 0.0062, sx > 0 ? 'right' : 'left');
+  }
+
   /* ---------------- prize door (bottom-left) ---------------- */
 
   const doorX = -0.265;
@@ -1041,15 +1462,30 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   const doorW = 0.27;
   const doorH = 0.152;
 
-  // recessed throat
-  add(root, new THREE.PlaneGeometry(doorW - 0.035, doorH - 0.035), new THREE.MeshBasicMaterial({ color: '#160d14' }), doorX, doorY, 0.4015, false);
+  // shallow shadow-box recess behind the opening: the belly panel is solid,
+  // so the depth has to sit in front of the print (7 mm of real geometry)
+  const recZ = 0.4006;
+  add(root, new THREE.PlaneGeometry(doorW - 0.035, doorH - 0.035), new THREE.MeshBasicMaterial({ color: '#0b0609' }), doorX, doorY, recZ, false);
+  const recMat = new THREE.MeshBasicMaterial({ color: '#120a10', side: THREE.DoubleSide });
+  const recD = 0.008;
+  for (const [w, h, x, y, rx] of [
+    [doorW - 0.035, recD, doorX, doorY + (doorH - 0.035) / 2, -Math.PI / 2],
+    [doorW - 0.035, recD, doorX, doorY - (doorH - 0.035) / 2, Math.PI / 2],
+  ] as [number, number, number, number, number][]) {
+    const wall = add(root, new THREE.PlaneGeometry(w, h), recMat, x, y, recZ + recD / 2, false);
+    wall.rotation.x = rx;
+  }
+  for (const sx of [-1, 1]) {
+    const wall = add(root, new THREE.PlaneGeometry(recD, doorH - 0.035), recMat, doorX + sx * (doorW - 0.035) / 2, doorY, recZ + recD / 2, false);
+    wall.rotation.y = sx > 0 ? Math.PI / 2 : -Math.PI / 2;
+  }
   add(
     root,
-    new THREE.PlaneGeometry(doorW - 0.035, doorH - 0.035),
-    new THREE.MeshBasicMaterial({ map: innerShadowTexture(), transparent: true, depthWrite: false, opacity: 0.95 }),
+    new THREE.PlaneGeometry(doorW - 0.036, doorH - 0.036),
+    new THREE.MeshBasicMaterial({ map: innerShadowTexture(), transparent: true, depthWrite: false, opacity: 0.94 }),
     doorX,
     doorY,
-    0.4025,
+    recZ + 0.0015,
     false
   );
 
@@ -1071,7 +1507,7 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     }),
     doorX,
     doorY - 0.004,
-    0.4075,
+    0.4092,
     false
   );
   flap.rotation.x = -0.05;
@@ -1083,11 +1519,37 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   add(root, rbox(doorW + bar, bar, 0.02, 0.008), pinkDeep, doorX, doorY + doorH / 2, 0.408);
   add(root, rbox(doorW + bar, bar, 0.02, 0.008), pinkDeep, doorX, doorY - doorH / 2, 0.408);
 
-  // chrome pull + hinge pins
-  add(root, new THREE.CylinderGeometry(0.004, 0.004, doorW - 0.06, 10), chromeMat, doorX, doorY - doorH / 2 + 0.028, 0.418, false).rotation.z = Math.PI / 2;
-  for (const s of [-1, 1]) {
-    add(root, new THREE.CylinderGeometry(0.0035, 0.0035, 0.012, 8), chromeMat, doorX + s * 0.07, doorY + doorH / 2 + 0.006, 0.413, false).rotation.z = Math.PI / 2;
+  // chrome retainer lip around the prize opening
+  for (const [w, h, dx, dy] of [
+    [doorW - 0.035, 0.007, 0, (doorH - 0.035) / 2],
+    [doorW - 0.035, 0.007, 0, -(doorH - 0.035) / 2],
+    [0.007, doorH - 0.035, -(doorW - 0.035) / 2, 0],
+    [0.007, doorH - 0.035, (doorW - 0.035) / 2, 0],
+  ]) {
+    add(root, rbox(w, h, 0.007, 0.0025), chromeMat, doorX + dx, doorY + dy, 0.4205, false);
   }
+
+  // two hinge leaves with knuckles and screws, proud of the frame
+  for (const s of [-1, 1]) {
+    const hx = doorX + s * 0.085;
+    add(root, rbox(0.036, 0.016, 0.006, 0.003), chromeMat, hx, doorY + doorH / 2 + 0.012, 0.4215, false);
+    add(root, rbox(0.03, 0.014, 0.006, 0.003), chromeMat, hx, doorY + doorH / 2 - 0.012, 0.4215, false);
+    add(root, new THREE.CylinderGeometry(0.0062, 0.0062, 0.038, 12), chromeMat, hx, doorY + doorH / 2 + 0.002, 0.4275, false).rotation.z = Math.PI / 2;
+    screwAt(root, hx, doorY + doorH / 2 + 0.012, 0.4252, 0.0046);
+    screwAt(root, hx, doorY + doorH / 2 - 0.012, 0.4252, 0.0046);
+  }
+
+  // chrome pull handle on two standoffs, mounted on the bottom frame bar
+  const handleY = doorY - doorH / 2 + 0.003;
+  add(root, new THREE.CylinderGeometry(0.0045, 0.0045, 0.09, 12), chromeMat, doorX, handleY, 0.4275, false).rotation.z = Math.PI / 2;
+  for (const s of [-1, 1]) {
+    add(root, new THREE.CylinderGeometry(0.0055, 0.0055, 0.014, 10), chromeMat, doorX + s * 0.034, handleY, 0.4205, false).rotation.x = Math.PI / 2;
+    add(root, new THREE.CylinderGeometry(0.0095, 0.0095, 0.002, 12), brushed, doorX + s * 0.034, handleY, 0.4215, false).rotation.x = Math.PI / 2;
+  }
+
+  // small cam lock in the door frame
+  add(root, new THREE.CylinderGeometry(0.0105, 0.0105, 0.008, 16), brushed, doorX + doorW / 2, doorY - 0.03, 0.421, false).rotation.x = Math.PI / 2;
+  add(root, new THREE.CircleGeometry(0.0086, 16), keyFace, doorX + doorW / 2, doorY - 0.03, 0.4253, false);
 
   // shadow cast into the throat
   const doorGlow = add(
@@ -1096,7 +1558,7 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     new THREE.MeshBasicMaterial({
       color: '#ffc78a',
       transparent: true,
-      opacity: 0.35,
+      opacity: 0.3,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     }),
@@ -1123,6 +1585,13 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   add(deck, rbox(1.035, 0.036, 0.375, 0.014), pinkDeep, 0, -0.042, 0, true);
   add(deck, rbox(1.045, 0.012, 0.385, 0.005), pinkInk, 0, -0.064, 0, false);
 
+  // deck is a screwed-down panel, not a single moulded lump
+  gapH(deck, 0.99, 0.004, 0, -0.0243, 0.1888);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) screwAt(deck, sx * 0.468, 0.0392, sz * 0.144, 0.0058, 'top', sx * 0.3);
+    screwAt(deck, sx * 0.44, -0.042, 0.1895, 0.0054, 'front');
+  }
+
   const deckPrint = add(
     deck,
     new THREE.PlaneGeometry(0.965, 0.325),
@@ -1137,7 +1606,11 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   // joystick: fixed base + articulated stick (rod + ball), pivot at the deck
   const joyX = -0.3;
   const joyZ = 0.02;
-  add(deck, rbox(0.13, 0.022, 0.13, 0.03), ink, joyX, 0.045, joyZ);
+  add(deck, rbox(0.138, 0.012, 0.138, 0.018), darkPlate, joyX, 0.0415, joyZ);
+  add(deck, rbox(0.126, 0.006, 0.126, 0.012), ink, joyX, 0.0468, joyZ);
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) screwAt(deck, joyX + sx * 0.054, 0.0494, joyZ + sz * 0.054, 0.0046, 'top', sx * 0.2);
+  }
   add(deck, new THREE.CylinderGeometry(0.056, 0.06, 0.02, 26), ink, joyX, 0.055, joyZ);
   add(deck, new THREE.CylinderGeometry(0.032, 0.04, 0.03, 20), rub, joyX, 0.073, joyZ);
   add(deck, new THREE.TorusGeometry(0.043, 0.0065, 8, 26), chromeMat, joyX, 0.069, joyZ).rotation.x = Math.PI / 2;
@@ -1176,6 +1649,11 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   const btnGlowRing = add(deck, new THREE.TorusGeometry(0.061, 0.0035, 6, 36), glow('#fff0a8', 1.6), btnX, 0.066, btnZ);
   btnGlowRing.rotation.x = Math.PI / 2;
 
+  // three fixings hold the button bezel to the deck
+  for (const a of [Math.PI / 2, (Math.PI * 7) / 6, (Math.PI * 11) / 6]) {
+    screwAt(deck, btnX + Math.cos(a) * 0.0975, 0.0398, btnZ + Math.sin(a) * 0.0975, 0.0046, 'top', a);
+  }
+
   const capMat = new THREE.MeshPhysicalMaterial({
     color: CAB.yellow,
     emissive: new THREE.Color(CAB.yellow),
@@ -1204,6 +1682,22 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   );
   buttonHit.position.set(btnX, 0.09, btnZ);
   deck.add(buttonHit);
+
+  // service switch tucked under the front lip, out of the player's sight
+  const svcX = 0.055;
+  add(deck, rbox(0.062, 0.012, 0.036, 0.005), darkPlate, svcX, -0.0785, 0.152, false);
+  add(deck, new THREE.CylinderGeometry(0.0118, 0.0118, 0.004, 16), chromeMat, svcX, -0.0865, 0.152, false);
+  add(deck, new THREE.CylinderGeometry(0.0085, 0.0095, 0.013, 16), plastic(CAB.red, { roughness: 0.42 }), svcX, -0.0925, 0.152, false);
+  for (const sx of [-1, 1]) screwAt(deck, svcX + sx * 0.024, -0.0849, 0.152, 0.0036, 'top');
+
+  // strip light under the front lip: it washes the prize door and coin door
+  // the way a real cabinet's service lamp does (and keeps them out of the
+  // deck's shadow)
+  add(deck, rbox(0.72, 0.006, 0.008, 0.002), glow('#fff3e4', 2.4), 0, -0.0675, 0.19, false);
+  add(deck, rbox(0.75, 0.008, 0.012, 0.003), darkPlate, 0, -0.0625, 0.187, false);
+  const deckLamp = new THREE.PointLight('#fff3e6', 0.12, 1.2, 2);
+  deckLamp.position.set(0, -0.16, 0.19);
+  deck.add(deckLamp);
 
   /* ---------------- play chamber ---------------- */
 
@@ -1250,11 +1744,38 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   add(root, rbox(0.055, 0.64, 0.085, 0.02), pink, -0.4825, 1.028, frameZ);
   add(root, rbox(0.055, 0.64, 0.085, 0.02), pink, 0.4825, 1.028, frameZ);
 
-  // inner white keyline + pale-blue gasket
-  add(root, rbox(0.926, 0.014, 0.02, 0.005), porcelain, 0, 1.292, 0.4285, false);
-  add(root, rbox(0.926, 0.014, 0.02, 0.005), porcelain, 0, 0.764, 0.4285, false);
-  add(root, rbox(0.014, 0.546, 0.02, 0.005), porcelain, -0.456, 1.028, 0.4285, false);
-  add(root, rbox(0.014, 0.546, 0.02, 0.005), porcelain, 0.456, 1.028, 0.4285, false);
+  // black rubber glass retainer: the whole window is gasketed, not glued in
+  for (const [w, h, x, y] of [
+    [0.9, 0.016, 0, 1.2895],
+    [0.9, 0.016, 0, 0.767],
+    [0.016, 0.523, -0.4515, 1.028],
+    [0.016, 0.523, 0.4515, 1.028],
+  ]) {
+    add(root, rbox(w, h, 0.014, 0.005), rub, x, y, 0.4295, false);
+  }
+
+  // white keyline just outside the rubber, printed on the frame face
+  add(root, rbox(0.938, 0.005, 0.004, 0.002), porcelain, 0, 1.2995, 0.4372, false);
+  add(root, rbox(0.938, 0.005, 0.004, 0.002), porcelain, 0, 0.7565, 0.4372, false);
+  add(root, rbox(0.005, 0.538, 0.004, 0.002), porcelain, -0.462, 1.028, 0.4372, false);
+  add(root, rbox(0.005, 0.538, 0.004, 0.002), porcelain, 0.462, 1.028, 0.4372, false);
+
+  // chrome corner retainers with a screw each
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      const cx = sx * 0.4935;
+      const cy = 1.028 + sy * 0.3;
+      add(root, rbox(0.038, 0.038, 0.005, 0.008), brushed, cx, cy, 0.4385, false);
+      screwAt(root, cx, cy, 0.4415, 0.0062, 'front', sx * 0.5);
+    }
+  }
+
+  // glass-door hinges on the left jamb
+  for (const hy of [0.84, 1.215]) {
+    add(root, new THREE.CylinderGeometry(0.0075, 0.0075, 0.075, 12), chromeMat, -0.5145, hy, 0.412, false);
+    add(root, rbox(0.018, 0.058, 0.007, 0.003), chromeMat, -0.5055, hy, 0.4395, false);
+    for (const dy of [-0.022, 0.022]) screwAt(root, -0.5055, hy + dy, 0.4435, 0.0042);
+  }
 
   // glass front
   const glassFront = add(root, new THREE.PlaneGeometry(0.925, 0.575), glass, 0, 1.025, 0.401, false);
@@ -1286,31 +1807,35 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     r.renderOrder = 4;
   }
 
-  // cool LED tubes inside the chamber
+  // LED strip lights built into the front corner posts: extruded channel,
+  // opal diffuser and a soft spill, instead of a floating glowing tube
   for (const sx of [-1, 1]) {
-    const led = add(root, new THREE.CapsuleGeometry(0.0065, 0.52, 4, 10), glow('#eaf8ff', 2.1), sx * 0.438, 1.02, 0.29, false);
+    add(root, rbox(0.022, 0.62, 0.022, 0.005), steel, sx * 0.448, 1.02, 0.301, false);
+    const led = add(root, rbox(0.007, 0.596, 0.013, 0.0025), glow('#ffffff', 2.9), sx * 0.4385, 1.02, 0.301, false);
     led.renderOrder = 4;
-    add(root, rbox(0.02, 0.6, 0.014, 0.005), azureDeep, sx * 0.438, 1.02, 0.28, false);
+    add(root, rbox(0.026, 0.024, 0.026, 0.006), darkPlate, sx * 0.448, 1.322, 0.301, false);
+    add(root, rbox(0.026, 0.024, 0.026, 0.006), darkPlate, sx * 0.448, 0.718, 0.301, false);
     const spill = add(
       root,
-      new THREE.PlaneGeometry(0.10, 0.62),
+      new THREE.PlaneGeometry(0.12, 0.62),
       new THREE.MeshBasicMaterial({
-        color: '#dff6ff',
+        color: '#e4f8ff',
         transparent: true,
-        opacity: 0.22,
+        opacity: 0.2,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       }),
-      sx * 0.43,
+      sx * 0.428,
       1.02,
-      0.296,
+      0.307,
       false
     );
     spill.renderOrder = 4;
   }
 
-  // white light bar under the roof
-  add(root, new THREE.CapsuleGeometry(0.008, 0.8, 4, 10), glow('#f2fbff', 1.6), 0, 1.292, -0.24, false).rotation.z = Math.PI / 2;
+  // ceiling light bar in an aluminium housing
+  add(root, rbox(0.9, 0.016, 0.03, 0.005), steel, 0, 1.301, -0.24, false);
+  add(root, rbox(0.86, 0.006, 0.018, 0.002), glow('#f4fcff', 2.2), 0, 1.292, -0.24, false);
 
   /* ---------------- blue header band ---------------- */
 
@@ -1327,12 +1852,28 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   add(root, rbox(1.05, 0.012, 0.115, 0.005), glow('#eaf9ff', 1.2), 0, 1.455, 0.345, false);
   add(root, rbox(1.05, 0.01, 0.115, 0.004), azurePale, 0, 1.34, 0.345, false);
 
+  // shadow gap where the blue header housing lands on the glass frame
+  gapH(root, 1.02, 0.0045, 0, 1.3495, 0.4378);
+
+  // speaker bar hidden behind a perforated strip on the riser face
+  add(root, rbox(0.66, 0.052, 0.012, 0.008), brushed, 0, 0.6995, 0.4065, false);
+  add(root, rbox(0.636, 0.038, 0.004, 0.004), matte('#0a080b'), 0, 0.6995, 0.4125, false);
+  perfPanel(root, 0.634, 0.036, 0, 0.6995, 0.4135);
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) screwAt(root, sx * 0.32, 0.6995 + sy * 0.019, 0.4138, 0.0042);
+  }
+
   /* ---------------- marquee ---------------- */
 
   add(root, rbox(1.1, 0.345, 0.175, 0.035), pinkDeep, 0, 1.602, 0.295);
   add(root, rbox(1.05, 0.305, 0.18, 0.028), pink, 0, 1.602, 0.302);
   add(root, rbox(1.108, 0.026, 0.185, 0.008), pinkInk, 0, 1.784, 0.295);
   add(root, rbox(1.108, 0.02, 0.185, 0.007), pinkInk, 0, 1.432, 0.295);
+
+  // black seal under the lightbox + chrome edge beads
+  add(root, rbox(1.104, 0.01, 0.008, 0.003), matte('#231722'), 0, 1.4345, 0.3895, false);
+  add(root, rbox(1.106, 0.006, 0.012, 0.0025), chromeMat, 0, 1.7905, 0.3895, false);
+  add(root, rbox(1.106, 0.005, 0.01, 0.002), chromeMat, 0, 1.4285, 0.3895, false);
 
   const marqueeTex = marqueeTexture();
   add(
@@ -1345,10 +1886,19 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     false
   );
 
+  // machined bezel holding the marquee print
+  add(root, rbox(1.026, 0.024, 0.014, 0.006), pinkDeep, 0, 1.7505, 0.3935, false);
+  add(root, rbox(1.026, 0.022, 0.014, 0.006), pinkDeep, 0, 1.4545, 0.3935, false);
+  add(root, rbox(0.024, 0.318, 0.014, 0.006), pinkDeep, -0.5025, 1.602, 0.3935, false);
+  add(root, rbox(0.024, 0.318, 0.014, 0.006), pinkDeep, 0.5025, 1.602, 0.3935, false);
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) screwAt(root, sx * 0.478, 1.602 + sy * 0.1485, 0.4022, 0.0054, 'front', sx * 0.4);
+  }
+
   // thin acrylic sheet over the lightbox + two glare bands
   const acrylic = add(
     root,
-    new THREE.PlaneGeometry(0.995, 0.293),
+    new THREE.PlaneGeometry(0.975, 0.283),
     new THREE.MeshPhysicalMaterial({
       color: '#eaf7ff',
       roughness: 0.04,
@@ -1417,17 +1967,36 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   // side caps on the marquee
   for (const sx of [-1, 1]) {
     add(root, rbox(0.028, 0.32, 0.185, 0.012), pinkDeep, sx * 0.546, 1.602, 0.295);
+    for (const sy of [-1, 1]) screwAt(root, sx * 0.5605, 1.602 + sy * 0.118, 0.365, 0.0052, sx > 0 ? 'right' : 'left');
+  }
+
+  // roof vent: perforated grille in a brushed frame
+  add(root, rbox(0.64, 0.006, 0.105, 0.006), brushed, 0, 1.7972, 0.3, false);
+  add(root, rbox(0.61, 0.004, 0.08, 0.004), matte('#0a080b'), 0, 1.8002, 0.3, false);
+  const roofVent = add(root, new THREE.PlaneGeometry(0.605, 0.076), perfMat, 0, 1.8028, 0.3, false);
+  roofVent.rotation.x = -Math.PI / 2;
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) screwAt(root, sx * 0.307, 1.8035, 0.3 + sz * 0.039, 0.0046, 'top');
   }
 
   /* ---------------- decals from the atlas ---------------- */
 
-  label(root, atlas, rects, 'うけとりぐち', 0.105, 0.034, -0.265, 0.372, 0.4015);
+  label(root, atlas, rects, 'うけとりぐち', 0.105, 0.034, -0.265, 0.372, 0.4012);
   label(root, atlas, rects, 'あそびかた', 0.11, 0.037, 0.33, 0.735, 0.4395);
-  label(root, atlas, rects, 'NO STEP', 0.082, 0.03, 0.36, 0.074, 0.4095);
+  label(root, atlas, rects, 'NO STEP', 0.082, 0.03, 0, 0.075, 0.4042);
   label(root, atlas, rects, 'HANDLE WITH CARE', 0.15, 0.052, -0.5125, 0.34, 0.05, -Math.PI / 2, 0.01);
   label(root, atlas, rects, 'PRIZE', 0.09, 0.032, 0.5125, 0.27, -0.08, Math.PI / 2, -0.015);
   label(root, atlas, rects, 'WARNING', 0.12, 0.042, 0.5125, 0.5, -0.16, Math.PI / 2, 0.01);
   label(root, atlas, rects, 'ゲット', 0.078, 0.078, 0.355, 0.535, 0.4015);
+
+  // hardware labels: coin door reads as a real coin entry, not a decal sheet
+  label(root, atlas, rects, 'INSERT COIN', 0.062, 0.017, 0.272, 0.302, 0.4098);
+  label(root, atlas, rects, '1 PLAY / ¥100', 0.066, 0.018, 0.272, 0.278, 0.4098);
+  label(root, atlas, rects, 'PUSH', 0.026, 0.01, 0.29, 0.253, 0.4108);
+  label(root, atlas, rects, 'SERVICE', 0.034, 0.01, 0.055, -0.0785, 0.1712);
+
+  // small serial tag on the base rail, off to one side
+  label(root, atlas, rects, 'MADE IN JAPAN', 0.07, 0.022, -0.33, 0.0455, 0.3982);
 
   /* ---------------- button behaviour ---------------- */
 

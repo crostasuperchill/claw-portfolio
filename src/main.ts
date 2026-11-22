@@ -149,11 +149,14 @@ async function boot() {
   }
 
   function enter(phase: Phase) {
-    if (phase === 'carry') {
+    if (phase === 'close') {
+      audio.clawClose();
+    } else if (phase === 'carry') {
       claw.target.set(D.chute.x, D.chute.z);
       audio.motor(0.9);
     } else if (phase === 'lift') {
-      if (!claw.grabbed) audio.fail();
+      if (claw.grabbed) audio.motor(0.8);
+      else audio.fail();
     } else if (phase === 'release') {
       if (claw.grabbed) pendingPrize = claw.grabbed;
       claw.release();
@@ -176,7 +179,7 @@ async function boot() {
       if (!grabTried && cycle.k > 0.55) {
         grabTried = true;
         claw.tryGrab();
-        audio.clawClose(!!claw.grabbed);
+        if (claw.grabbed) audio.grabSuccess();
       }
     } else if (cycle.phase === 'lift') {
       claw.setHeight(lerp(DROP, HOME, easeInOut(cycle.k)));
