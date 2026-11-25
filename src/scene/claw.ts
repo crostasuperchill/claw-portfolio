@@ -7,119 +7,177 @@ import { mergeStatic } from './merge';
 import type { BodyRef } from '../contracts';
 
 const S = D.clawScale * 1.02;
-const CABLE_TOP = 1.265;
-const HEAD_TOP = -0.012;
 
+/* ── vertical layout ─────────────────────────────────────────────────────── */
+/* the pink window frame starts at y = 1.298: everything above the carriage
+   box has to stay below it so the whole rectangle stays visible. */
+const RAIL_Y = 1.282;
+const BEAM_Y = 1.276;
+const CARRIAGE_Y = 1.242; // centre of the brushed carriage box (top = 1.270)
+const CABLE_TOP = 1.198; // underside of the carriage neck
+const HEAD_TOP = -0.018; // cable anchor, in head-local units
+
+/* ── finger kinematics (head-local) ──────────────────────────────────────── */
 const L1 = 0.05;
 const L2 = 0.068;
-const PIVOT_Z = 0.088;
+const PIVOT_Z = 0.046;
 const A_CLOSED = 0.35;
 const C_CLOSED = 1.02;
-const A_OPEN = 0.62;
-const C_OPEN = 0.3;
+const A_OPEN = 0.3;
+const C_OPEN = 0.6;
 const PIVOT_Y = D.grabTipOffset / S + L1 * Math.cos(A_CLOSED) + L2 * Math.cos(C_CLOSED);
 
-/* bright gleaming silver materials */
+/* the lower hub where the diagonal struts are anchored */
+const HUB_Y = -0.088;
+const HUB_R = 0.014;
+
+/* ── bright, illustrated chrome palette ──────────────────────────────────── */
 const chrome = new THREE.MeshStandardMaterial({
-  color: '#f2f6fb',
-  metalness: 0.78,
-  roughness: 0.16,
+  color: '#f4f7fb',
+  metalness: 0.86,
+  roughness: 0.12,
+  envMapIntensity: 1.8,
+});
+
+const chromeSoft = new THREE.MeshStandardMaterial({
+  color: '#dce3ed',
+  metalness: 0.8,
+  roughness: 0.2,
   envMapIntensity: 1.55,
 });
 
 const brushed = new THREE.MeshStandardMaterial({
-  color: '#cfd6e0',
-  metalness: 0.68,
-  roughness: 0.28,
-  envMapIntensity: 1.35,
+  color: '#c7d0dc',
+  metalness: 0.74,
+  roughness: 0.3,
+  envMapIntensity: 1.45,
+});
+
+const brushedLight = new THREE.MeshStandardMaterial({
+  color: '#e4e9f1',
+  metalness: 0.72,
+  roughness: 0.26,
+  envMapIntensity: 1.6,
 });
 
 const darkSteel = new THREE.MeshStandardMaterial({
-  color: '#464d57',
-  metalness: 0.6,
-  roughness: 0.38,
-  envMapIntensity: 1.0,
+  color: '#3c4451',
+  metalness: 0.66,
+  roughness: 0.34,
+  envMapIntensity: 1.1,
 });
 
 const coilBlack = new THREE.MeshStandardMaterial({
-  color: '#1e2128',
-  metalness: 0.15,
-  roughness: 0.55,
+  color: '#1b1e24',
+  metalness: 0.2,
+  roughness: 0.5,
+  envMapIntensity: 0.7,
 });
 
 const UP = new THREE.Vector3(0, 1, 0);
-const slingDir = new THREE.Vector3();
+const DOWN = new THREE.Vector3(0, -1, 0);
 const cableDir = new THREE.Vector3();
+const coilDir = new THREE.Vector3();
+const strutDir = new THREE.Vector3();
 
 const M = {
-  xyOmega: 9.4,
-  xyZeta: 0.9,
-  xyMaxSpeed: 1.15,
-  returnOmega: 4.2,
-  returnZeta: 0.14,
-  returnMaxSpeed: 0.45,
-  hOmega: 9.0,
+  /* carriage travel: slightly softer than before, so it has visible inertia */
+  xyOmega: 8.0,
+  xyZeta: 0.86,
+  xyMaxSpeed: 1.12,
+  returnOmega: 4.8,
+  returnZeta: 0.16,
+  returnMaxSpeed: 0.5,
+  /* vertical spring: a little under-damped so the claw settles with weight */
+  hOmega: 8.4,
   hZeta: 0.5,
-  hGain: 1.4,
-  hKick: 0.075,
-  hKickCool: 1.2,
-  swayOmega: 5.2,
-  swayZeta: 0.32,
-  swayGain: 0.16,
-  swayLimit: 0.03,
-  swayLoadOmega: 4.3,
-  swayLoadZeta: 0.42,
-  swayLoadGain: 0.21,
-  swayLoadLimit: 0.042,
+  hGain: 1.25,
+  hKick: 0.062,
+  hKickCool: 1.35,
+  /* pendulum */
+  swayOmega: 5.0,
+  swayZeta: 0.28,
+  swayGain: 0.17,
+  swayLimit: 0.032,
+  swayLoadOmega: 4.1,
+  swayLoadZeta: 0.36,
+  swayLoadGain: 0.22,
+  swayLoadLimit: 0.045,
+  tiltGain: 0.55,
   headLever: 0.3,
-  tiltGain: 0.6,
-  leanGain: 0.045,
-  leanLimit: 0.024,
-  leanOmega: 5.5,
-  gripOmega: 26,
-  gripZeta: 0.42,
-  gripLimit: 0.06,
-  gripRate: 2.0,
-  gripSnap: 1.1,
-  fingerDelay: 0.04,
+  leanGain: 0.05,
+  leanLimit: 0.026,
+  leanOmega: 4.8,
+  /* fingers */
+  gripOmega: 24,
+  gripZeta: 0.38,
+  gripLimit: 0.055,
+  gripRate: 2.2,
+  gripSnap: 1.35,
+  fingerDelay: 0.045,
+  /* idle breathing */
+  idleSwayOmega: 1.35,
+  idleSwayAccX: 0.07,
+  idleSwayAccZ: 0.052,
 };
 
-function makeCoiledCableGeo() {
+/**
+ * Tight black helical power cord. Built at the real length so the tube keeps
+ * its round cross-section instead of being squashed by a non-uniform scale.
+ * Spans 0 → -length on Y so it can hang from the carriage (DOWN mapped to dir).
+ */
+function makeCoiledCableGeo(length: number) {
   const pts: THREE.Vector3[] = [];
   const turns = 11;
-  const steps = 66;
+  const steps = 264;
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const a = t * turns * Math.PI * 2;
-    const r = 0.011;
-    pts.push(new THREE.Vector3(Math.cos(a) * r, 0.5 - t, Math.sin(a) * r));
+    const r = 0.0105;
+    const bow = 0.002 * Math.sin(Math.PI * t);
+    pts.push(new THREE.Vector3(Math.cos(a) * r + bow, -t * length, Math.sin(a) * r));
   }
   const curve = new THREE.CatmullRomCurve3(pts);
-  return new THREE.TubeGeometry(curve, 64, 0.0028, 5, false);
+  return new THREE.TubeGeometry(curve, 320, 0.0032, 5, false);
 }
 
+/**
+ * Sleek chrome prong blade. Built in XY (x = outward, y = down) as a closed
+ * crescent that bulges just past the knuckle and tapers into a rounded tip
+ * that curls back inwards. Then rotated so +X becomes +Z (radially outward).
+ */
 function makeCurvedClawGeo() {
-  // Curved crescent blade in XY, rotated so X maps to +Z (outward)
   const s = new THREE.Shape();
-  s.moveTo(-0.004, 0.004);
-  s.quadraticCurveTo(0.022, -0.024, 0.014, -0.048);
-  s.quadraticCurveTo(0.006, -0.062, -0.003, -L2);
-  s.quadraticCurveTo(0.002, -0.052, 0.006, -0.042);
-  s.quadraticCurveTo(0.012, -0.022, -0.008, -0.004);
+  s.moveTo(0.007, 0.004);
+  s.quadraticCurveTo(0.0135, -0.006, 0.0148, -0.02);
+  s.quadraticCurveTo(0.0158, -0.034, 0.014, -0.046);
+  s.quadraticCurveTo(0.0115, -0.058, 0.005, -0.066);
+  s.quadraticCurveTo(0.002, -0.0695, 0.001, -0.0665);
+  s.quadraticCurveTo(0.0035, -0.058, 0.005, -0.048);
+  s.quadraticCurveTo(0.006, -0.034, 0.0045, -0.02);
+  s.quadraticCurveTo(0.003, -0.008, 0.001, 0.001);
+  s.quadraticCurveTo(0.0035, 0.0055, 0.007, 0.004);
   s.closePath();
 
   const geo = new THREE.ExtrudeGeometry(s, {
-    depth: 0.007,
+    depth: 0.012,
     bevelEnabled: true,
-    bevelThickness: 0.0018,
-    bevelSize: 0.0018,
-    bevelSegments: 1,
-    curveSegments: 8,
+    bevelThickness: 0.0016,
+    bevelSize: 0.0013,
+    bevelSegments: 2,
+    curveSegments: 12,
   });
-  geo.translate(0, 0, -0.0035);
+  geo.translate(0, 0, -0.006);
   geo.rotateY(-Math.PI / 2);
   return geo;
 }
+
+type Finger = {
+  upper: THREE.Group;
+  lower: THREE.Group;
+  strut: THREE.Mesh;
+  angle: number;
+};
 
 export class Claw {
   root = new THREE.Group();
@@ -132,12 +190,13 @@ export class Claw {
 
   private body: RAPIER.RigidBody;
   private joint: RAPIER.ImpulseJoint | null = null;
-  private fingers: { upper: THREE.Group; lower: THREE.Group }[] = [];
+  private fingers: Finger[] = [];
   private bridge: THREE.Group;
   private carriage: THREE.Group;
   private cable: THREE.Mesh;
+  private sleeve: THREE.Mesh;
   private coil: THREE.Mesh;
-  private slings: THREE.Mesh[] = [];
+  private coilBuilt = 0;
 
   private vx = 0;
   private vz = 0;
@@ -153,6 +212,7 @@ export class Claw {
   private swVX = 0;
   private swVZ = 0;
   private swingKicked = false;
+  private liftKicked = false;
   private loadK = 0;
   private returnK = 0;
   private sinceRelease = 99;
@@ -161,6 +221,7 @@ export class Claw {
   private fingerV = [0, 0, 0];
   private fingerSnap = [false, false, false];
   private gripCmd = 1;
+  private closedTug = false;
   private gripHist: { t: number; v: number }[] = [];
   private leanX = 0;
   private leanZ = 0;
@@ -177,113 +238,202 @@ export class Claw {
     // ─── gantry rails ───────────────────────────────────────────────────────
     const gantry = new THREE.Group();
     for (const z of [-0.345, 0.345]) {
-      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.9, 10), chrome);
+      const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.0095, 0.0095, 0.9, 14), chrome);
       rail.rotation.z = Math.PI / 2;
-      rail.position.set(0, 1.304, z);
+      rail.position.set(0, RAIL_Y, z);
       gantry.add(rail);
+
+      const end = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.012, 14), darkSteel);
+      end.rotation.z = Math.PI / 2;
+      end.position.set(0.45, RAIL_Y, z);
+      gantry.add(end);
+      const end2 = end.clone();
+      end2.position.x = -0.45;
+      gantry.add(end2);
     }
     mergeStatic(gantry);
     this.root.add(gantry);
 
     // ─── sliding bridge ─────────────────────────────────────────────────────
     this.bridge = new THREE.Group();
-    const beam = new THREE.Mesh(new RoundedBoxGeometry(0.036, 0.02, 0.72, 2, 0.005), brushed);
-    beam.position.y = 1.298;
+    const beam = new THREE.Mesh(new RoundedBoxGeometry(0.038, 0.02, 0.72, 2, 0.006), brushed);
+    beam.position.y = BEAM_Y;
     this.bridge.add(beam);
+    const beamCap = new THREE.Mesh(new RoundedBoxGeometry(0.042, 0.008, 0.72, 2, 0.003), chromeSoft);
+    beamCap.position.y = BEAM_Y + 0.012;
+    this.bridge.add(beamCap);
     for (const z of [-0.345, 0.345]) {
-      const truck = new THREE.Mesh(new RoundedBoxGeometry(0.052, 0.026, 0.044, 2, 0.005), darkSteel);
-      truck.position.set(0, 1.3, z);
+      const truck = new THREE.Mesh(new RoundedBoxGeometry(0.056, 0.03, 0.046, 2, 0.006), chromeSoft);
+      truck.position.set(0, BEAM_Y, z);
       this.bridge.add(truck);
+      const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.06, 12), chrome);
+      hub.rotation.z = Math.PI / 2;
+      hub.position.set(0, BEAM_Y, z);
+      this.bridge.add(hub);
     }
     mergeStatic(this.bridge);
     this.root.add(this.bridge);
 
-    // ─── motor carriage ─────────────────────────────────────────────────────
+    // ─── rectangular brushed-aluminium carriage ─────────────────────────────
     this.carriage = new THREE.Group();
-    const box = new THREE.Mesh(new RoundedBoxGeometry(0.092, 0.048, 0.092, 2, 0.008), brushed);
-    box.position.y = 1.278;
+    this.carriage.position.set(0, CARRIAGE_Y, 0);
+
+    // top of the box sits at CARRIAGE_Y + 0.028 = 1.270, a clean 28 mm below
+    // the pink window frame so the whole rectangle is visible.
+    const box = new THREE.Mesh(new RoundedBoxGeometry(0.165, 0.056, 0.098, 4, 0.01), brushed);
     this.carriage.add(box);
-    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.018, 16), chrome);
-    collar.position.y = 1.248;
+
+    const lid = new THREE.Mesh(new RoundedBoxGeometry(0.146, 0.009, 0.082, 2, 0.0035), brushedLight);
+    lid.position.y = 0.024;
+    this.carriage.add(lid);
+
+    const seam = new THREE.Mesh(new RoundedBoxGeometry(0.166, 0.003, 0.099, 1, 0.001), chromeSoft);
+    seam.position.y = 0.004;
+    this.carriage.add(seam);
+
+    // dark bottom collar plus chrome neck
+    const collar = new THREE.Mesh(new RoundedBoxGeometry(0.104, 0.011, 0.07, 2, 0.0035), darkSteel);
+    collar.position.y = -0.031;
     this.carriage.add(collar);
+
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.017, 0.016, 18), chrome);
+    neck.position.y = -0.041;
+    this.carriage.add(neck);
+
+    // front machined bolt heads
+    for (const x of [-0.058, 0.058]) {
+      const bolt = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.004, 10), chromeSoft);
+      bolt.rotation.x = Math.PI / 2;
+      bolt.position.set(x, 0.008, 0.0495);
+      this.carriage.add(bolt);
+    }
     mergeStatic(this.carriage);
     this.root.add(this.carriage);
 
     // ─── telescoping shaft + coiled black cable ─────────────────────────────
-    this.cable = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, 1, 10), chrome);
+    const cableGeo = new THREE.CylinderGeometry(0.0078, 0.0088, 1, 12);
+    cableGeo.translate(0, 0.5, 0);
+    this.cable = new THREE.Mesh(cableGeo, chrome);
     this.root.add(this.cable);
 
-    this.coil = new THREE.Mesh(makeCoiledCableGeo(), coilBlack);
+    this.sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.0125, 0.0145, 0.026, 14), chromeSoft);
+    this.root.add(this.sleeve);
+
+    this.coil = new THREE.Mesh(makeCoiledCableGeo(0.1), coilBlack);
+    this.coilBuilt = 0.1;
     this.root.add(this.coil);
 
-    for (let i = 0; i < 2; i++) {
-      const sling = new THREE.Mesh(new THREE.CylinderGeometry(0.0022, 0.0022, 1, 6), brushed);
-      this.slings.push(sling);
-      this.root.add(sling);
-    }
-
-    // ─── silver machined claw head ──────────────────────────────────────────
+    // ─── machined chrome claw head ──────────────────────────────────────────
     const head = this.head;
     head.scale.setScalar(S);
 
+    // vertical stepped cylinder: thin upper shaft → machined barrel →
+    // compact clevis hub. Deliberately no wide "flying saucer" flange.
     const headLathe = new THREE.Mesh(
       new THREE.LatheGeometry(
         [
-          [0.012, -0.008],
-          [0.02, -0.012],
-          [0.024, -0.024],
-          [0.072, -0.03],
-          [0.078, -0.036],
-          [0.078, -0.048],
-          [0.068, -0.055],
-          [0.036, -0.064],
-          [0.022, -0.068],
-          [0, -0.068],
+          [0, -0.018],
+          [0.004, -0.0182],
+          [0.0058, -0.0196],
+          [0.0058, -0.0222],
+          [0.0092, -0.0234],
+          [0.0115, -0.0258],
+          [0.0115, -0.0318],
+          [0.0126, -0.0334],
+          [0.017, -0.0348],
+          [0.0224, -0.0362],
+          [0.0286, -0.0382],
+          [0.0308, -0.04],
+          [0.0314, -0.0442],
+          [0.0314, -0.0596],
+          [0.03, -0.062],
+          [0.0334, -0.0646],
+          [0.034, -0.068],
+          [0.034, -0.0752],
+          [0.0326, -0.0782],
+          [0.0272, -0.0802],
+          [0.018, -0.0812],
+          [0.012, -0.0816],
+          [0, -0.0818],
         ].map(([r, y]) => new THREE.Vector2(r, y)),
-        24
+        32
       ),
       chrome
     );
     head.add(headLathe);
 
-    const flange = new THREE.Mesh(new THREE.CylinderGeometry(0.082, 0.082, 0.007, 24), brushed);
-    flange.position.y = -0.038;
-    head.add(flange);
-
-    for (const side of [-1, 1]) {
-      const eyelet = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.007, 0.008, 10), chrome);
-      eyelet.position.set(side * 0.074, -0.028, 0);
-      head.add(eyelet);
+    // two neat machined rings on the barrel
+    for (const y of [-0.047, -0.055]) {
+      const groove = new THREE.Mesh(new THREE.TorusGeometry(0.0313, 0.0012, 6, 36), brushedLight);
+      groove.rotation.x = Math.PI / 2;
+      groove.position.y = y;
+      head.add(groove);
     }
 
-    // ─── 3 sleek curved prongs ──────────────────────────────────────────────
+    // vertical central plunger rod below the hub
+    const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.0078, 0.0052, 0.032, 16), chromeSoft);
+    spindle.position.y = -0.0978;
+    head.add(spindle);
+
+    const spindleTip = new THREE.Mesh(new THREE.SphereGeometry(0.0052, 12, 8), chrome);
+    spindleTip.position.y = -0.1138;
+    head.add(spindleTip);
+
+    // chrome bosses where the three linkage struts meet the plunger
+    for (let i = 0; i < 3; i++) {
+      const angle = (i / 3) * Math.PI * 2;
+      const boss = new THREE.Mesh(new THREE.SphereGeometry(0.0062, 12, 8), chromeSoft);
+      boss.position.set(Math.sin(angle) * HUB_R, HUB_Y, Math.cos(angle) * HUB_R);
+      head.add(boss);
+    }
+
+    // ─── 3 sleek curved chrome prongs with linkage struts ───────────────────
     const clawBladeGeo = makeCurvedClawGeo();
     for (let i = 0; i < 3; i++) {
-      const angle = (i / 3) * Math.PI * 2 + Math.PI / 6;
+      const angle = (i / 3) * Math.PI * 2;
 
+      // compact chrome clevis ear on the barrel, all bright steel
       const mount = new THREE.Group();
       mount.rotation.y = angle;
-      const lug = new THREE.Mesh(new RoundedBoxGeometry(0.024, 0.018, 0.024, 1, 0.003), brushed);
-      lug.position.set(0, PIVOT_Y, 0.082);
+      const lug = new THREE.Mesh(new RoundedBoxGeometry(0.012, 0.016, 0.022, 2, 0.003), brushedLight);
+      lug.position.set(0, PIVOT_Y, 0.037);
       mount.add(lug);
+      for (const side of [-1, 1]) {
+        const cheek = new THREE.Mesh(new RoundedBoxGeometry(0.0018, 0.016, 0.02, 1, 0.0008), chromeSoft);
+        cheek.position.set(side * 0.0065, PIVOT_Y, 0.04);
+        mount.add(cheek);
+      }
+      const lugPin = new THREE.Mesh(new THREE.CylinderGeometry(0.0038, 0.0038, 0.018, 12), chromeSoft);
+      lugPin.rotation.z = Math.PI / 2;
+      lugPin.position.set(0, PIVOT_Y, PIVOT_Z);
+      mount.add(lugPin);
       head.add(mount);
 
+      // upper link — pivot sits on the clevis ear, rotated round the barrel
       const finger = new THREE.Group();
       finger.rotation.y = angle;
-      finger.position.set(0, PIVOT_Y, PIVOT_Z);
+      finger.position.set(Math.sin(angle) * PIVOT_Z, PIVOT_Y, Math.cos(angle) * PIVOT_Z);
 
       const upper = new THREE.Group();
-      const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.013, 12, 10), chrome);
+      const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.0105, 16, 12), chrome);
       upper.add(shoulder);
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.007, L1, 10), chrome);
+      const shoulderPin = new THREE.Mesh(new THREE.CylinderGeometry(0.0042, 0.0042, 0.022, 10), chromeSoft);
+      shoulderPin.rotation.z = Math.PI / 2;
+      upper.add(shoulderPin);
+      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.0085, 0.007, L1, 12), chrome);
       arm.position.y = -L1 / 2;
       upper.add(arm);
-      const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.011, 12, 10), brushed);
+      const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.0095, 14, 10), chromeSoft);
       knuckle.position.y = -L1;
       upper.add(knuckle);
+      const knucklePin = new THREE.Mesh(new THREE.CylinderGeometry(0.0038, 0.0038, 0.022, 10), chromeSoft);
+      knucklePin.rotation.z = Math.PI / 2;
+      knucklePin.position.y = -L1;
+      upper.add(knucklePin);
       mergeStatic(upper);
       upper.traverse((o) => (o.userData.noMerge = true));
 
+      // long C-blade
       const lower = new THREE.Group();
       lower.position.y = -L1;
       const blade = new THREE.Mesh(clawBladeGeo, chrome);
@@ -292,8 +442,14 @@ export class Claw {
 
       upper.add(lower);
       finger.add(upper);
-      this.fingers.push({ upper, lower });
       head.add(finger);
+
+      // inner diagonal strut, updated every frame in head-local space
+      const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.0032, 0.0032, 1, 8), chromeSoft);
+      strut.userData.noMerge = true;
+      head.add(strut);
+
+      this.fingers.push({ upper, lower, strut, angle });
     }
 
     this.root.add(this.head);
@@ -345,7 +501,7 @@ export class Claw {
 
     const tx = this.target.x;
     const tz = this.target.y;
-    const nearHome = Math.hypot(tx, tz - 0.02) < 0.06;
+    const nearHome = Math.hypot(tx + 0.2, tz - 0.02) < 0.06 || Math.hypot(tx, tz - 0.02) < 0.06;
     const wantReturn = this.sinceRelease < 1.3 && nearHome ? 1 : 0;
     this.returnK += (wantReturn - this.returnK) * Math.min(1, dt * 12);
     const boost = this.returnK;
@@ -395,10 +551,18 @@ export class Claw {
       this.prevCmd = this.height;
       const aCmd = THREE.MathUtils.clamp(rawAcc, -6, 6);
 
+      // mechanical engage at the top of a descent
       if (this.cmdVel < -0.004 && this.hKickCool <= 0 && this.height > D.clawDropY + 0.05) {
         this.hOffV += M.hKick;
         this.hKickCool = M.hKickCool;
       }
+
+      // the prize's weight sags the claw as the lift starts
+      if (!this.liftKicked && this.grabbed && this.cmdVel > 0.01 && this.height < D.clawDropY + 0.025) {
+        this.hOffV -= 0.075;
+        this.liftKicked = true;
+      }
+      if (this.height > D.clawHomeY - 0.02 || !this.grabbed) this.liftKicked = false;
 
       const steps = Math.max(1, Math.ceil(dt * 120));
       const h = dt / steps;
@@ -409,8 +573,8 @@ export class Claw {
       }
 
       if (!this.swingKicked && this.grabbed && this.cmdVel > 0.012 && this.height < D.clawDropY + 0.03) {
-        this.swVX += 0.035;
-        this.swVZ -= 0.02;
+        this.swVX += 0.032;
+        this.swVZ -= 0.018;
         this.swingKicked = true;
       }
       if (this.height > D.clawHomeY - 0.015) this.swingKicked = false;
@@ -442,11 +606,18 @@ export class Claw {
     const gain = M.swayGain + (M.swayLoadGain - M.swayGain) * this.loadK;
     const limit = M.swayLimit + (M.swayLoadLimit - M.swayLimit) * this.loadK;
 
+    // idle breathing: tiny pendulum driven acceleration at rest
+    const motion = Math.hypot(this.vx, this.vz);
+    const idleW = THREE.MathUtils.clamp(1 - motion / 0.05, 0, 1);
+    const t = this.clock * M.idleSwayOmega;
+    const idleX = Math.sin(t) * M.idleSwayAccX * idleW;
+    const idleZ = Math.cos(t * 0.83 + 1.2) * M.idleSwayAccZ * idleW;
+
     const steps = Math.max(1, Math.ceil(dt * 120));
     const h = dt / steps;
     for (let i = 0; i < steps; i++) {
-      const accX = -omega * omega * this.swX - 2 * zeta * omega * this.swVX - ax * gain;
-      const accZ = -omega * omega * this.swZ - 2 * zeta * omega * this.swVZ - az * gain;
+      const accX = -omega * omega * this.swX - 2 * zeta * omega * this.swVX - ax * gain + idleX;
+      const accZ = -omega * omega * this.swZ - 2 * zeta * omega * this.swVZ - az * gain + idleZ;
       this.swVX += accX * h;
       this.swVZ += accZ * h;
       this.swX += this.swVX * h;
@@ -471,8 +642,19 @@ export class Claw {
   private stepFingers(dt: number) {
     if (dt > 0) {
       const want = this.grip;
+      const prev = this.gripCmd;
       const maxStep = M.gripRate * dt;
       this.gripCmd += THREE.MathUtils.clamp(want - this.gripCmd, -maxStep, maxStep);
+
+      // the close snaps shut: small upward tug + recoil when the jaws cross
+      if (!this.closedTug && prev > 0.5 && this.gripCmd <= 0.5) {
+        this.hOffV += 0.05;
+        this.swVX += 0.018;
+        this.closedTug = true;
+      } else if (this.closedTug && this.gripCmd > 0.8) {
+        this.closedTug = false;
+      }
+
       this.gripHist.push({ t: this.clock, v: this.gripCmd });
       while (this.gripHist.length > 2 && this.clock - this.gripHist[0].t > M.fingerDelay * 3 + 0.06) {
         this.gripHist.shift();
@@ -524,11 +706,11 @@ export class Claw {
 
   private applyVisual() {
     const top = CABLE_TOP;
-    const cableLen = Math.max(0.012, top - (this.hVis + HEAD_TOP * S));
-    const lever = cableLen + M.headLever;
+    const cableLen = Math.max(0.014, top - (this.hVis + HEAD_TOP * S));
+    const swingLever = cableLen + 0.3;
 
-    const headX = this.pos.x + Math.sin(this.swX) * lever;
-    const headZ = this.pos.y + Math.sin(this.swZ) * lever;
+    const headX = this.pos.x + Math.sin(this.swX) * swingLever;
+    const headZ = this.pos.y + Math.sin(this.swZ) * swingLever;
 
     this.head.position.set(headX, this.hVis, headZ);
     this.head.rotation.z = this.swX * M.tiltGain + this.leanZ;
@@ -536,42 +718,67 @@ export class Claw {
 
     this.body.setNextKinematicTranslation({ x: headX, y: this.hVis, z: headZ });
 
+    // fingers + diagonal linkage struts (head-local coordinates)
     for (let i = 0; i < this.fingers.length; i++) {
+      const f = this.fingers[i];
       const g = this.fingerG[i];
-      this.fingers[i].upper.rotation.x = -THREE.MathUtils.lerp(A_CLOSED, A_OPEN, g);
-      this.fingers[i].lower.rotation.x = THREE.MathUtils.lerp(C_CLOSED, C_OPEN, g);
+      const a = -THREE.MathUtils.lerp(A_CLOSED, A_OPEN, g);
+      f.upper.rotation.x = a;
+      f.lower.rotation.x = THREE.MathUtils.lerp(C_CLOSED, C_OPEN, g);
+
+      const ky = PIVOT_Y - L1 * Math.cos(a);
+      const kz = PIVOT_Z - L1 * Math.sin(a);
+      const sx = Math.sin(f.angle);
+      const cz = Math.cos(f.angle);
+      const p1x = sx * HUB_R;
+      const p1z = cz * HUB_R;
+      const p2x = sx * kz;
+      const p2z = cz * kz;
+      strutDir.set(p2x - p1x, ky - HUB_Y, p2z - p1z);
+      const len = Math.max(1e-4, strutDir.length());
+      f.strut.position.set((p1x + p2x) / 2, (HUB_Y + ky) / 2, (p1z + p2z) / 2);
+      f.strut.quaternion.setFromUnitVectors(UP, strutDir.normalize());
+      f.strut.scale.set(1, len, 1);
     }
 
     this.bridge.position.x = this.pos.x;
-    this.carriage.position.set(this.pos.x, 0, this.pos.y);
+    this.carriage.position.set(this.pos.x, CARRIAGE_Y, this.pos.y);
+    this.carriage.rotation.z = -this.swX * 0.16;
+    this.carriage.rotation.x = this.swZ * 0.16;
 
+    // telescoping chrome shaft
+    const bottom = this.hVis + HEAD_TOP * S;
     const anchorX = this.pos.x + Math.sin(this.swX) * cableLen;
     const anchorZ = this.pos.y + Math.sin(this.swZ) * cableLen;
-    const bottom = this.hVis + HEAD_TOP * S;
     cableDir.set(anchorX - this.pos.x, bottom - top, anchorZ - this.pos.y);
-    const len = Math.max(0.012, cableDir.length());
+    const len = Math.max(0.014, cableDir.length());
     this.cable.scale.set(1, len, 1);
-    this.cable.position.set((this.pos.x + anchorX) / 2, (top + bottom) / 2, (this.pos.y + anchorZ) / 2);
-    this.cable.quaternion.setFromUnitVectors(UP, cableDir.normalize());
+    this.cable.position.set(this.pos.x, top, this.pos.y);
+    this.cable.quaternion.setFromUnitVectors(UP, cableDir.clone().normalize());
 
-    this.coil.scale.set(1, Math.max(0.03, len * 0.9), 1);
-    this.coil.position.set(this.cable.position.x - 0.02, this.cable.position.y, this.cable.position.z);
-    this.coil.quaternion.copy(this.cable.quaternion);
+    this.sleeve.position.set(this.pos.x, top - 0.013, this.pos.y);
 
-    const anchorY = this.hVis - 0.028 * S;
-    for (let i = 0; i < this.slings.length; i++) {
-      const sling = this.slings[i];
-      const bx = headX + (i === 0 ? -1 : 1) * 0.074 * S;
-      slingDir.set(bx - this.pos.x, anchorY - top, headZ - this.pos.y);
-      const slen = Math.max(0.02, slingDir.length());
-      sling.position.set((this.pos.x + bx) / 2, (top + anchorY) / 2, (this.pos.y + headZ) / 2);
-      sling.scale.set(1, slen, 1);
-      sling.quaternion.setFromUnitVectors(UP, slingDir.normalize());
+    // black coiled cord: a neat, tight vertical helix just left of the chrome
+    // shaft, running from the carriage underside to the top of the cylinder.
+    const coilTopX = this.pos.x - 0.052;
+    const coilTopY = CARRIAGE_Y - 0.03;
+    const coilTopZ = this.pos.y;
+    const coilBotX = headX - 0.022 * S;
+    const coilBotY = this.hVis - 0.048 * S;
+    const coilBotZ = headZ;
+    coilDir.set(coilBotX - coilTopX, coilBotY - coilTopY, coilBotZ - coilTopZ);
+    const coilLen = Math.max(0.02, coilDir.length());
+    if (Math.abs(coilLen - this.coilBuilt) > 0.0035) {
+      this.coil.geometry.dispose();
+      this.coil.geometry = makeCoiledCableGeo(coilLen);
+      this.coilBuilt = coilLen;
     }
+    this.coil.position.set(coilTopX, coilTopY, coilTopZ);
+    this.coil.quaternion.setFromUnitVectors(DOWN, coilDir.clone().normalize());
   }
 
   private sample() {
-    const lever = Math.max(0.012, CABLE_TOP - (this.hVis + HEAD_TOP * S)) + M.headLever;
+    const lever = Math.max(0.014, CABLE_TOP - (this.hVis + HEAD_TOP * S)) + M.headLever;
     return {
       y: this.height,
       yVis: this.hVis,
@@ -634,6 +841,7 @@ export class Claw {
     this.grip = 1;
     this.sinceRelease = 0;
     this.swingKicked = false;
+    this.liftKicked = false;
   }
 
   get hasJoint() {

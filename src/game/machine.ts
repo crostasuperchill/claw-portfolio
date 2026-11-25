@@ -4,17 +4,17 @@ export const ORDER = ['drop', 'close', 'lift', 'carry', 'release', 'return'] as 
 
 /**
  * Durate delle fasi (secondi). Il ciclo completo resta sotto i 6 s:
- * 1.35 + 0.95 + 1.05 + 0.9 + 0.3 + 0.95 = 5.5 s.
+ * 1.35 + 0.9 + 1.05 + 0.9 + 0.3 + 0.9 = 5.4 s.
  * La discesa e' la fase piu' lunga (il claw deve "pesare"); il ritorno e'
- * piu' rapido dell'andata (0.95 < 1.35).
+ * piu' rapido dell'andata.
  */
 export const DURATION = {
   drop: 1.35,
-  close: 0.95,
+  close: 0.9,
   lift: 1.05,
   carry: 0.9,
   release: 0.3,
-  return: 0.95,
+  return: 0.9,
 };
 
 /** Pausa in fondo alla discesa prima che le chele inizino a chiudersi (s). */
@@ -49,11 +49,13 @@ export class Cycle {
   }
 
   /**
-   * Progresso della fase, gia' sagomato:
-   * - drop/lift: piccolo "carico" iniziale (il motore stacca piano), poi rampa
-   *   quasi lineare: l'easeInOut applicato dal chiamante fa il resto.
-   * - close: 200 ms di pausa in fondo, chiusura in 350 ms, poi tenuta.
-   * - carry/release/return: lineare.
+   * Progresso della fase, gia' sagomato.
+   * - drop: 55 ms di "engage" meccanico, poi una rampa che decelera gia' in
+   *   fondo (il chiamante applica easeInOut per l'atterraggio morbido).
+   * - close: 200 ms di pausa, poi chiusura rapida con snap (ease-out cubica).
+   * - lift: 30 ms di carico, poi rampa smoothstep: il peso e' reso dalla
+   *   molla verticale del claw (hOff), non da un overshoot artificiale.
+   * - carry/release/return: lineari.
    */
   get k(): number {
     if (this.phase === 'idle') return 0;
@@ -61,18 +63,20 @@ export class Cycle {
     const u = clamp01(this.t / dur);
     switch (this.phase) {
       case 'drop': {
-        const hold = 0.05;
-        return clamp01((u - hold) / (1 - hold));
+        const hold = 0.055;
+        const r = clamp01((u - hold) / (1 - hold));
+        return 1 - Math.pow(1 - r, 1.6);
       }
       case 'lift': {
         const hold = 0.03;
-        return clamp01((u - hold) / (1 - hold));
+        const r = clamp01((u - hold) / (1 - hold));
+        return smoothstep(r);
       }
       case 'close': {
         const pause = CLOSE_PAUSE / dur;
         const stroke = CLOSE_STROKE / dur;
         const r = clamp01((u - pause) / stroke);
-        return r * r;
+        return 1 - Math.pow(1 - r, 3);
       }
       default:
         return u;

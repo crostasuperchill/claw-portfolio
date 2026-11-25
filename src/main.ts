@@ -19,7 +19,7 @@ import { createPrizeCard } from './ui/prizeCard';
 import { createAudio } from './ui/audio';
 import { createHud } from './ui/hud';
 
-const FILL_TINTS = ['#ff88bc', '#66c2ff', '#ffe066', '#6be8be', '#b894ff', '#ffa375'];
+const FILL_TINTS = ['#ff8cc6', '#6ee294', '#ffe268', '#6ec4ff', '#be94ff', '#ff6e8a', '#8cf0dc'];
 const HOME = D.clawHomeY;
 const DROP = D.clawDropY;
 
@@ -59,15 +59,36 @@ async function boot() {
 
   const spots = spawnLayout({
     seed: 20261122,
-    count: 24,
+    count: 42,
     width: D.playfield.w,
     depth: D.playfield.d,
     radius: D.capsuleR,
     floorY: D.playfield.y,
     exclude: { x: D.chute.x, z: D.chute.z, w: 0.24, d: 0.24 },
   });
-  const sorted = [...spots].sort((a, b) => b.y - a.y);
-  const prizeSpots = sorted.slice(0, PROJECTS.length);
+  // Pick 6 prominent top-layer spots spread across X and biased toward the front so all 6 hero toys are clearly visible
+  const topLayer = [...spots].sort((a, b) => b.y - a.y).slice(0, 14);
+  const byX = [...topLayer].sort((a, b) => a.x - b.x);
+  const prizeSpots: typeof spots = [];
+  for (let i = 0; i < PROJECTS.length; i++) {
+    const bandStart = Math.floor((i * byX.length) / PROJECTS.length);
+    const bandEnd = Math.max(bandStart + 1, Math.floor(((i + 1) * byX.length) / PROJECTS.length));
+    const band = byX.slice(bandStart, bandEnd).filter((s) => !prizeSpots.includes(s));
+    const pick = (band.length ? band : topLayer.filter((s) => !prizeSpots.includes(s))).sort(
+      (a, b) => b.y * 2 + b.z - (a.y * 2 + a.z)
+    )[0];
+    if (pick) prizeSpots.push(pick);
+  }
+  const charms = buildCharms({
+    labels: [
+      { text: 'Web Dev', color: '#ff82b8' },
+      { text: 'UX/UI', color: '#5ee0c4' },
+      { text: 'Front-end', color: '#4cb5ff' },
+    ],
+    topY: 1.275,
+    z: -0.06,
+    halfWidth: 0.34,
+  });
 
   const refs = new Map<number, BodyRef>();
   const prizeRoot = new THREE.Group();
@@ -78,6 +99,8 @@ async function boot() {
     const mesh = makeCapsule({ project: p, radius: D.capsuleR });
     mergeStatic(mesh);
     mesh.position.set(spot.x, spot.y, spot.z);
+    mesh.rotation.z = (i % 2 === 0 ? 1 : -1) * (0.14 + (i % 3) * 0.06);
+    mesh.rotation.y = (i - 2.5) * 0.08;
     prizeRoot.add(mesh);
     const { body, collider } = addCapsule(world, spot, D.capsuleR);
     refs.set(collider.handle, { body, collider, projectId: p.id, mesh });
@@ -86,18 +109,6 @@ async function boot() {
   const fillSpots = spots.filter((s) => !prizeSpots.includes(s));
   const field = new CapsuleField(fillSpots.length, D.capsuleR);
   studio.scene.add(field.group);
-
-  const charms = buildCharms({
-    labels: [
-      { text: 'Web Dev', color: '#ff82b8' },
-      { text: 'Front-end', color: '#4cb5ff' },
-      { text: 'UX/UI', color: '#5ee0c4' },
-      { text: '3D Art', color: '#b492ff' },
-    ],
-    topY: 1.29,
-    z: -0.17,
-    halfWidth: 0.34,
-  });
   studio.scene.add(charms.group);
   const tmpMatrix = new THREE.Matrix4();
   const tmpPos = new THREE.Vector3();
@@ -114,6 +125,9 @@ async function boot() {
   field.commit();
 
   const claw = new Claw(world, refs);
+  claw.target.set(-0.2, 0.02);
+  claw.pos.set(-0.2, 0.02);
+  claw.update(0);
   studio.scene.add(claw.root);
 
   bootFill.style.width = '84%';
@@ -175,7 +189,7 @@ async function boot() {
       claw.release();
       audio.release(!!claw.grabbed);
     } else if (phase === 'return') {
-      claw.target.set(0, 0.02);
+      claw.target.set(-0.2, 0.02);
       audio.motor(1.0);
     } else if (phase === 'idle') {
       cabinet.setButtonEnabled(true);
@@ -314,7 +328,6 @@ async function boot() {
         anyInstDirty = true;
       } else if (ref.mesh) {
         ref.mesh.position.set(t.x, t.y, t.z);
-        ref.mesh.quaternion.set(r.x, r.y, r.z, r.w);
       }
     }
     if (anyInstDirty) field.commit();

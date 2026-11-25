@@ -2,6 +2,9 @@ import * as THREE from 'three';
 
 export type Controls = { dispose(): void };
 
+const clamp = (n: number, min: number, max: number) =>
+  Math.min(max, Math.max(min, n));
+
 /**
  * Input arcade, due sole affordance reali:
  * - LEVETTA: la trascini (o trascini nella fascia del deck) e il claw si sposta
@@ -9,6 +12,10 @@ export type Controls = { dispose(): void };
  *   macchina è occupata (il feedback arriva prima della logica)
  * Hit test in spazio schermo, niente raycast: non dipende dal merge della
  * geometria né dalla forma esatta del modello.
+ *
+ * Le aree sono proporzionali al viewport e mai più larghe di metà della
+ * distanza reale tra levetta e bottone: con la camera stretta (fov 13) e il
+ * cabinet full-bleed su iPhone 390×844 i due bersagli non si rubano i tocchi.
  */
 export function createControls(opts: {
   canvas: HTMLCanvasElement;
@@ -22,12 +29,11 @@ export function createControls(opts: {
   onFirstGesture?: () => void;
   onDragStart?: () => void;
 }) {
-  const STICK_R = 105;
-  const BUTTON_R = 90;
   let dragId: number | null = null;
   let active = false;
   let startX = 0;
   let startY = 0;
+  let dragR = 100;
 
   function local(e: PointerEvent) {
     const r = opts.canvas.getBoundingClientRect();
@@ -37,38 +43,59 @@ export function createControls(opts: {
   const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
     Math.hypot(a.x - b.x, a.y - b.y);
 
+  /**
+   * Radii tarati sul lato corto: ~66px su iPhone, ~122px su desktop 1440×900.
+   * Il clamp sulla distanza dei due centri evita zone sovrapposte.
+   */
+  function hitZones(w: number, h: number) {
+    const k = clamp(Math.min(w || 1, h || 1) / 720, 0.66, 1.22);
+    const stick = opts.stickCenter();
+    const button = opts.buttonCenter();
+    const gap = dist(stick, button);
+    const stickLimit = gap > 0 ? gap * 0.46 : Infinity;
+    const buttonLimit = gap > 0 ? gap * 0.44 : Infinity;
+    return {
+      stick,
+      button,
+      stickR: Math.min(100 * k, stickLimit),
+      buttonR: Math.min(84 * k, buttonLimit),
+      deckLift: Math.max(44, 78 * k),
+    };
+  }
+
   function emit(x: number, y: number) {
     let dx = x - startX;
     let dy = y - startY;
     const len = Math.hypot(dx, dy);
-    if (len > STICK_R) {
-      dx = (dx / len) * STICK_R;
-      dy = (dy / len) * STICK_R;
+    if (len > dragR) {
+      dx = (dx / len) * dragR;
+      dy = (dy / len) * dragR;
     }
-    opts.onStick(dx / STICK_R, -dy / STICK_R);
+    opts.onStick(dx / dragR, -dy / dragR);
   }
 
   function down(e: PointerEvent) {
     opts.onFirstGesture?.();
     const p = local(e);
+    const zones = hitZones(p.w, p.h);
 
-    if (dist(p, opts.buttonCenter()) < BUTTON_R) {
+    if (dist(p, zones.button) < zones.buttonR) {
       // corsa del bottone sempre; la logica decide se il braccio scende
       opts.onPress();
       if (opts.canDrop()) opts.onDrop();
       return;
     }
 
-    const stick = opts.stickCenter();
-    const nearStick = dist(p, stick) < STICK_R * 0.9;
-    // fascia del deck (sotto la vetrina, fino alla zona comandi inferiore)
-    const onDeck = p.y >= stick.y - 65 && p.y <= stick.y + 185;
+    const nearStick = dist(p, zones.stick) < zones.stickR;
+    // fascia del deck: dalla levetta fino al bordo inferiore del viewport
+    const onDeck = p.y >= zones.stick.y - zones.deckLift && p.y <= p.h;
     if (!nearStick && !onDeck) return;
 
     active = true;
     dragId = e.pointerId;
     startX = p.x;
     startY = p.y;
+    dragR = zones.stickR;
     try {
       opts.canvas.setPointerCapture(e.pointerId);
     } catch {

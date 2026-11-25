@@ -6,18 +6,30 @@ import { PROJECTS } from '../game/roster';
 import { makeToy } from './toys';
 
 const TAU = Math.PI * 2;
-const _camLocal = new THREE.Vector3();
+const _white = new THREE.Color('#ffffff');
+const _spinQuat = new THREE.Quaternion();
+const _spinEuler = new THREE.Euler();
+const _spinMat = new THREE.Matrix4();
+const _instMat = new THREE.Matrix4();
+
+/** Deterministic 0..1 hash so every filler capsule keeps its own tilt. */
+function hash01(n: number) {
+  const s = Math.sin(n * 127.1 + 311.7) * 43758.5453123;
+  return s - Math.floor(s);
+}
 
 /**
- * Saturated kawaii pastel capsule palette matching the UFO catcher reference photo.
+ * Bright translucent gashapon pastels sampled from the capsule pile in
+ * reference/target.png: candy pink, apple mint, sunny yellow, sky cyan,
+ * lavender and coral rose.
  */
 export const CAPSULE_PALETTE = [
-  '#46b3ff', // sky blue — MagicWall
-  '#ff69a8', // candy pink — Jollycat
-  '#ffd133', // sunny yellow — ZORA
-  '#9d74ff', // pastel lilac — Oracle
-  '#4ee0b0', // mint green — Polaroids
-  '#ff9364', // peach coral — Say hi
+  '#6ec4ff', // sky cyan-blue — MagicWall
+  '#ff8cc6', // candy pink — Jollycat
+  '#ffe268', // sunny pastel yellow — ZORA
+  '#be94ff', // lavender-lilac — Oracle
+  '#6ee294', // apple / mint green — Polaroids
+  '#ff6e8a', // coral rose — Say hi
 ] as const;
 
 function plasticTint(input: THREE.ColorRepresentation): THREE.Color {
@@ -25,11 +37,11 @@ function plasticTint(input: THREE.ColorRepresentation): THREE.Color {
   const hsl = { h: 0, s: 0, l: 0 };
   c.getHSL(hsl);
   if (hsl.l < 0.1 || hsl.s < 0.05) {
-    return c.setHSL(0.045, 0.84, 0.6);
+    return new THREE.Color('#ff8cc6');
   }
-  const s = THREE.MathUtils.clamp(hsl.s * 0.9 + 0.42, 0.78, 0.96);
-  const l = THREE.MathUtils.clamp(0.58 + (hsl.l - 0.5) * 0.05, 0.54, 0.65);
-  return c.setHSL(hsl.h, s, l);
+  // Lift the hue toward a bright candy pastel without muddying it.
+  c.setHSL(hsl.h, THREE.MathUtils.clamp(hsl.s * 0.86 + 0.18, 0.7, 0.95), 0.64);
+  return c;
 }
 
 const PRIZE_COLORS = [...CAPSULE_PALETTE];
@@ -39,7 +51,6 @@ const PRIZE_COLORS = [...CAPSULE_PALETTE];
 const lowerCache = new Map<number, THREE.BufferGeometry>();
 const upperCache = new Map<number, THREE.BufferGeometry>();
 const ringCache = new Map<number, THREE.BufferGeometry>();
-const labelGeoCache = new Map<number, THREE.BufferGeometry>();
 
 function halfLower(r: number) {
   let g = lowerCache.get(r);
@@ -59,41 +70,79 @@ function halfUpper(r: number) {
   return g;
 }
 
+/**
+ * Colored half of a gashapon capsule: semi-translucent glossy candy plastic.
+ * FrontSide + transparency keeps the toy inside readable, and a Fresnel rim
+ * mixes in a frosted white highlight so the shell reads like tinted acrylic
+ * rather than an opaque clay bowl.
+ */
 function shellMaterial() {
-  return new THREE.MeshStandardMaterial({
+  const m = new THREE.MeshPhysicalMaterial({
     color: '#ffffff',
-    roughness: 0.22,
-    metalness: 0.02,
+    roughness: 0.12,
+    metalness: 0.0,
     envMapIntensity: 1.0,
-    side: THREE.DoubleSide,
-    shadowSide: THREE.FrontSide,
-  });
-}
-
-let sharedGlassMat: THREE.MeshStandardMaterial | null = null;
-function glassMaterial() {
-  if (sharedGlassMat) return sharedGlassMat;
-  const m = new THREE.MeshStandardMaterial({
-    color: '#eaf7ff',
-    roughness: 0.04,
-    metalness: 0.04,
     transparent: true,
-    opacity: 0.16,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    envMapIntensity: 2.1,
+    opacity: 0.78,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.12,
+    side: THREE.FrontSide,
+    depthWrite: true,
   });
 
   m.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
       '#include <normal_fragment_maps>',
       `#include <normal_fragment_maps>
-       float glassFresnel = pow(1.0 - saturate(abs(dot(normal, normalize(vViewPosition)))), 0.9);
-       diffuseColor.a = mix(opacity * 1.25, opacity * 4.4, glassFresnel);`
+       float shellFresnel = pow(1.0 - saturate(abs(dot(normal, normalize(vViewPosition)))), 2.1);
+       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), shellFresnel * 0.38);
+       diffuseColor.a = clamp(diffuseColor.a + shellFresnel * 0.14, 0.0, 1.0);`
+    );
+  };
+  m.customProgramCacheKey = () => 'capsule-shell-fresnel-v1';
+  return m;
+}
+
+let sharedGlassMat: THREE.MeshStandardMaterial | null = null;
+/**
+ * Clear acrylic dome. A smooth Fresnel rim plus two painted specular
+ * highlights give the illustrated "shiny gashapon ball" read while staying a
+ * single cheap standard material.
+ */
+function glassMaterial() {
+  if (sharedGlassMat) return sharedGlassMat;
+  const m = new THREE.MeshStandardMaterial({
+    color: '#ffffff',
+    roughness: 0.07,
+    metalness: 0.02,
+    transparent: true,
+    opacity: 0.1,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    envMapIntensity: 1.0,
+  });
+
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <normal_fragment_maps>',
+      `#include <normal_fragment_maps>
+       float glassFresnel = pow(1.0 - saturate(abs(dot(normal, normalize(vViewPosition)))), 1.45);
+       diffuseColor.a = mix(opacity * 1.2, 0.6, glassFresnel);`
+    );
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <opaque_fragment>',
+      `vec3 glassHiA = normalize(vec3(-0.36, 0.58, 0.73));
+       vec3 glassHiB = normalize(vec3(0.54, -0.26, 0.80));
+       float glassSpecA = pow(saturate(dot(normal, glassHiA)), 72.0);
+       float glassSpecB = pow(saturate(dot(normal, glassHiB)), 160.0);
+       float glassSpec = clamp(glassSpecA * 1.0 + glassSpecB * 0.7, 0.0, 0.95);
+       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), glassSpec);
+       diffuseColor.a = max(diffuseColor.a, glassSpec * 0.9);
+       #include <opaque_fragment>`
     );
   };
   m.forceSinglePass = true;
-  m.customProgramCacheKey = () => 'capsule-glass-std-fresnel-v1';
+  m.customProgramCacheKey = () => 'capsule-glass-std-fresnel-v4';
   sharedGlassMat = m;
   return m;
 }
@@ -167,119 +216,6 @@ function prizeMaterial() {
 }
 
 /* ------------------------------------------------------------------ */
-/* label                                                               */
-/* ------------------------------------------------------------------ */
-
-function bandColor(hex: string): THREE.Color {
-  const c = new THREE.Color(hex);
-  const hsl = { h: 0, s: 0, l: 0 };
-  c.getHSL(hsl);
-  if (hsl.l < 0.1 || hsl.s < 0.06) {
-    return c.setHSL(0.04, 0.8, 0.54);
-  }
-  const s = THREE.MathUtils.clamp(hsl.s * 0.96 + 0.1, 0.68, 1);
-  const l = THREE.MathUtils.clamp(hsl.l, 0.34, 0.48);
-  return c.setHSL(hsl.h, s, l);
-}
-
-function labelTexture(title: string, color: string) {
-  const W = 384;
-  const H = 136;
-  const c = document.createElement('canvas');
-  c.width = W;
-  c.height = H;
-  const g = c.getContext('2d')!;
-  const band = bandColor(color);
-  const top = band.clone().offsetHSL(0, -0.02, 0.04);
-  const bottom = band.clone().offsetHSL(0, 0.02, -0.04);
-
-  const grad = g.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, `#${top.getHexString()}`);
-  grad.addColorStop(1, `#${bottom.getHexString()}`);
-  g.fillStyle = grad;
-  g.fillRect(0, 0, W, H);
-
-  g.strokeStyle = 'rgba(0,0,0,0.14)';
-  g.lineWidth = 2;
-  g.beginPath();
-  g.roundRect(7, 7, W - 14, H - 14, 8);
-  g.stroke();
-
-  const label = title.toUpperCase();
-  const areaTop = 6;
-  const areaH = 96;
-  const maxW = W - 34;
-  let size = 90;
-  let sx = 1;
-  const nameFont = (px: number) =>
-    `900 ${px}px "HelveticaNeue-CondensedBlack", "Helvetica Neue Condensed Black", "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
-  for (;;) {
-    g.font = nameFont(size);
-    const widest = g.measureText(label).width;
-    sx = Math.min(1, maxW / widest);
-    if (sx >= 0.76 || size <= 24) break;
-    size -= 2;
-  }
-
-  g.save();
-  g.translate(W / 2, areaTop + areaH / 2);
-  g.scale(sx, 1);
-  g.fillStyle = '#ffffff';
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.lineJoin = 'round';
-  g.strokeStyle = 'rgba(0,0,0,0.28)';
-  g.lineWidth = Math.max(2, size * 0.04);
-  g.strokeText(label, 0, 0);
-  g.fillText(label, 0, 0);
-  g.restore();
-
-  g.fillStyle = 'rgba(255,255,255,0.82)';
-  g.textAlign = 'center';
-  g.font = '800 9px "Helvetica Neue", Arial, sans-serif';
-  g.fillText('DAVIDE.FYI  ·  PRIZE', W / 2, 124);
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
-}
-
-const LABEL_PHI = TAU / 3;
-const LABEL_THETA_START = Math.PI / 2 + 0.02;
-const LABEL_THETA = 0.7;
-
-function labelGeometry(r: number) {
-  let g = labelGeoCache.get(r);
-  if (!g) {
-    g = new THREE.SphereGeometry(
-      r * 1.006,
-      20,
-      10,
-      Math.PI / 2 - LABEL_PHI / 2,
-      LABEL_PHI,
-      LABEL_THETA_START,
-      LABEL_THETA
-    );
-    labelGeoCache.set(r, g);
-  }
-  return g;
-}
-
-function labelMaterial(tex: THREE.Texture) {
-  return new THREE.MeshStandardMaterial({
-    map: tex,
-    roughness: 0.45,
-    metalness: 0,
-    envMapIntensity: 0.65,
-    side: THREE.FrontSide,
-    transparent: true,
-    opacity: 1,
-    polygonOffset: true,
-    polygonOffsetFactor: -1,
-    polygonOffsetUnits: -1,
-  });
-}
 
 /** Instanced filler capsules: 4 draw calls total. */
 export class CapsuleField {
@@ -314,17 +250,47 @@ export class CapsuleField {
 
   setColor(index: number, color: string) {
     const shell = plasticTint(color);
+    // gentle per-capsule hue / lightness drift so the pile never looks cloned
+    shell.offsetHSL(
+      (hash01(index * 7.31 + 3.1) - 0.5) * 0.035,
+      0,
+      (hash01(index * 9.17 + 1.7) - 0.5) * 0.05
+    );
     this.lower.setColorAt(index, shell);
-    this.inner.setColorAt(index, new THREE.Color(PRIZE_COLORS[index % PRIZE_COLORS.length]));
+
+    // clear dome picks up a soft pastel tint from the candy half
+    this.upper.setColorAt(index, shell.clone().lerp(_white, 0.7));
+
+    // pastel prize silhouette floating inside the clear dome
+    const prize = new THREE.Color(PRIZE_COLORS[(index + 2) % PRIZE_COLORS.length])
+      .lerp(_white, 0.3)
+      .offsetHSL(0, -0.06, 0.02);
+    this.inner.setColorAt(index, prize);
+
     if (this.lower.instanceColor) this.lower.instanceColor.needsUpdate = true;
+    if (this.upper.instanceColor) this.upper.instanceColor.needsUpdate = true;
     if (this.inner.instanceColor) this.inner.instanceColor.needsUpdate = true;
   }
 
+  /**
+   * Place a filler capsule. The clear dome stays mostly upright so the toys
+   * inside are readable; only ~8% are flipped to show their candy half on top,
+   * like the dense gashapon sea in reference/target.png.
+   */
   setMatrix(index: number, m: THREE.Matrix4) {
-    this.lower.setMatrixAt(index, m);
-    this.upper.setMatrixAt(index, m);
-    this.ring.setMatrixAt(index, m);
-    this.inner.setMatrixAt(index, m);
+    const flip = hash01(index + 0.83) > 0.92 ? Math.PI : 0;
+    const tilt = (hash01(index * 1.73 + 4.2) - 0.5) * 0.9;
+    const yaw = hash01(index * 2.41 + 9.7) * TAU;
+    const roll = (hash01(index * 3.17 + 2.9) - 0.5) * 0.7;
+    _spinEuler.set(flip + tilt, yaw, roll, 'YXZ');
+    _spinQuat.setFromEuler(_spinEuler);
+    _spinMat.makeRotationFromQuaternion(_spinQuat);
+    _instMat.copy(m).multiply(_spinMat);
+
+    this.lower.setMatrixAt(index, _instMat);
+    this.upper.setMatrixAt(index, _instMat);
+    this.ring.setMatrixAt(index, _instMat);
+    this.inner.setMatrixAt(index, _instMat);
   }
 
   hide(index: number) {
@@ -341,7 +307,7 @@ export class CapsuleField {
   }
 }
 
-/** Hero prize capsule with miniature toy + project label. */
+/** Hero prize capsule: clean translucent gashapon shell with the toy inside. */
 export function makeCapsule(opts: CapsuleOptions): THREE.Group {
   const { project, radius, tint } = opts;
   const g = new THREE.Group();
@@ -355,39 +321,29 @@ export function makeCapsule(opts: CapsuleOptions): THREE.Group {
   const r = radius;
 
   const lower = new THREE.Mesh(halfLower(r), shellMaterial());
-  (lower.material as THREE.MeshStandardMaterial).color.copy(base);
+  const lowerMat = lower.material as THREE.MeshPhysicalMaterial;
+  lowerMat.color.copy(base);
+  // Hero shells are nearly clear so the prize toy reads boldly through them.
+  lowerMat.opacity = 0.28;
+  lowerMat.depthWrite = false;
+  lower.renderOrder = 2;
   lower.castShadow = true;
   lower.receiveShadow = true;
   g.add(lower);
 
   const upper = new THREE.Mesh(halfUpper(r), glassMaterial());
+  upper.renderOrder = 2;
   g.add(upper);
 
   const ring = new THREE.Mesh(ringGeometry(r), ringMaterial());
   g.add(ring);
 
   const toy = makeToy(project?.toy ?? 'charm', project?.color ?? '#ffd0e0');
-  toy.scale.setScalar(0.9);
-  toy.position.y = 0.004;
+  toy.scale.setScalar(1.32);
+  toy.position.y = 0.012;
+  toy.rotation.x = -0.08;
+  toy.userData.noMerge = true;
   g.add(toy);
-
-  if (project) {
-    const tex = labelTexture(project.title, project.color);
-    const mat = labelMaterial(tex);
-    const geo = labelGeometry(r);
-    const label = new THREE.Mesh(geo, mat);
-    label.userData.noMerge = true;
-    label.onBeforeRender = (_renderer, _scene, camera) => {
-      const capsule = label.parent;
-      if (!capsule) return;
-      _camLocal.copy(camera.position);
-      capsule.worldToLocal(_camLocal);
-      label.rotation.y = Math.atan2(_camLocal.x, _camLocal.z);
-      label.updateMatrix();
-      label.matrixWorld.multiplyMatrices(capsule.matrixWorld, label.matrix);
-    };
-    g.add(label);
-  }
 
   g.userData.projectId = project?.id ?? null;
   return g;

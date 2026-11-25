@@ -88,13 +88,59 @@ function pockets(bottom: Cell[], step: number): { x: number; z: number }[] {
 }
 
 /**
- * Due strati stabili.
+ * Buchi stabili sopra uno strato già occupato: baricentri delle terne di
+ * capsule che formano un triangolo di lato ~passo. La capsula nasce appoggiata
+ * sui tre centri e la quota è calcolata perché la distanza 3D da ognuno sia
+ * almeno un diametro (niente compenetrazione allo spawn).
+ */
+function layerPockets(prev: Spot[], step: number, radius: number): Spot[] {
+  if (prev.length < 3) return [];
+  const lo = step * 0.86;
+  const hi = step * 1.14;
+  const minArea = 0.28 * ((Math.sqrt(3) / 4) * step * step);
+  const diameter = radius * 2 * 1.002;
+  const out: Spot[] = [];
+  for (let i = 0; i < prev.length; i++) {
+    const a = prev[i];
+    for (let j = i + 1; j < prev.length; j++) {
+      const b = prev[j];
+      const dab = Math.hypot(a.x - b.x, a.z - b.z);
+      if (dab < lo || dab > hi) continue;
+      for (let k = j + 1; k < prev.length; k++) {
+        const c = prev[k];
+        const dac = Math.hypot(a.x - c.x, a.z - c.z);
+        const dbc = Math.hypot(b.x - c.x, b.z - c.z);
+        if (dac < lo || dac > hi || dbc < lo || dbc > hi) continue;
+        const area = Math.abs((b.x - a.x) * (c.z - a.z) - (c.x - a.x) * (b.z - a.z)) / 2;
+        if (area < minArea) continue;
+        const x = (a.x + b.x + c.x) / 3;
+        const z = (a.z + b.z + c.z) / 3;
+        let y = -Infinity;
+        for (const p of [a, b, c]) {
+          const d = Math.hypot(x - p.x, z - p.z);
+          const need = Math.sqrt(Math.max(0, diameter * diameter - d * d));
+          y = Math.max(y, p.y + need);
+        }
+        if (out.some((o) => Math.hypot(o.x - x, o.z - z) < step * 0.5)) continue;
+        out.push({ x, y: y + TOP_CLEARANCE, z });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Pila a più strati stabili.
  *
  * Lo strato basso riempie il pavimento a reticolo esagonale (fila di 4 e di 3
  * capsule, passo 2.05r) e lascia libero il buco dello chute: nessuna capsula
  * nasce sopra il vuoto, quindi non può caderci da sola. Lo strato alto occupa
  * una buca su due tra le terne dello strato basso, come in un impilamento
  * esagonale: ogni capsula ha tre appoggi e non rotola via.
+ *
+ * Oltre la capacità dei due strati, gli extra finiscono in buche triangolari
+ * dello strato precedente (terzo, quarto strato…), sempre filtrate lontano
+ * dallo chute e dentro il playfield: nessuna capsula nasce sopra il vuoto.
  *
  * `exclude` è il footprint dello chute passato dal gioco; il buco fisico però
  * è CHUTE_GAP, quindi il layout usa il centro dell'exclude e il buco vero.
@@ -119,9 +165,13 @@ export function spawnLayout(opts: {
   const bottomMain: Cell[] = [];
   const bottomStrips: Cell[] = [];
 
+  // Bordo destro del buco + margine: nessuno strato alto può sporgere sopra il vuoto.
+  let chuteSafeX = -Infinity;
+
   if (exclude) {
     const gx0 = exclude.x - CHUTE_GAP / 2;
     const gx1 = exclude.x + CHUTE_GAP / 2;
+    chuteSafeX = gx1 + CHUTE_RIM + radius * 1.8;
     const gz0 = exclude.z - CHUTE_GAP / 2;
     const gz1 = exclude.z + CHUTE_GAP / 2;
     const clear = CHUTE_RIM + radius;
@@ -221,14 +271,69 @@ export function spawnLayout(opts: {
       .sort(sortPlan);
     for (const p of chosenTop) spots.push(p);
 
-    // Oltre la capacità dei due strati: impila gli avanzi sopra la pila.
-    const base = [...allBottom.map(asSpot), ...topPockets];
-    let extra = 0;
-    while (spots.length < count && base.length) {
-      const b = base[extra % base.length];
-      const lift = Math.floor(extra / base.length) + 1;
-      spots.push({ x: b.x, y: b.y + lift * (2 * radius + 0.004), z: b.z });
-      extra++;
+    // Strati successivi: buche triangolari sopra le capsule già posate.
+    // Le quote sono calcolate perché ogni capsula appoggi su tre supporti
+    // senza compenetrare; il filtro sul buco evita qualunque sporgenza.
+    let prev: Spot[] = chosenTop;
+    for (let layer = 0; layer < 6 && spots.length < count; layer++) {
+      const candidates = layerPockets(prev, step, radius)
+        .filter((p) => {
+          if (Math.abs(p.x) > halfW - radius + 1e-9) return false;
+          if (Math.abs(p.z) > halfD - radius + 1e-9) return false;
+          if (p.x <= chuteSafeX) return false;
+          return true;
+        })
+        .sort((a, b) => distanceFromPile(a) - distanceFromPile(b));
+
+      // Due buche adiacenti condividono due supporti: si possono occupare solo
+      // buche alternate, altrimenti le capsule dello stesso strato si toccano.
+      const accepted: Spot[] = [];
+      for (const c of candidates) {
+        if (spots.length + accepted.length >= count) break;
+        if (accepted.some((a) => Math.hypot(a.x - c.x, a.z - c.z) < radius * 2.001)) continue;
+        accepted.push(c);
+      }
+      if (!accepted.length) break;
+      accepted.sort(sortPlan);
+      for (const p of accepted) spots.push(p);
+      prev = accepted;
+    }
+
+    // Fallback per conteggi molto alti: mensole sicure sopra la pila, sempre
+    // a destra dello chute e con spazio verticale calcolato per non
+    // compenetrare nulla allo spawn.
+    let shelfGuard = 0;
+    while (spots.length < count && shelfGuard++ < 6) {
+      const heightAt = (p: { x: number; z: number }) => {
+        let y = floorY + radius + 0.004;
+        for (const s of spots) {
+          const d = Math.hypot(p.x - s.x, p.z - s.z);
+          if (d >= radius * 2) continue;
+          const need = Math.sqrt(Math.max(0, (radius * 2 * 1.002) ** 2 - d * d));
+          y = Math.max(y, s.y + need);
+        }
+        return y + TOP_CLEARANCE;
+      };
+      const candidates = allBottom
+        .filter(
+          (c) =>
+            c.x > chuteSafeX &&
+            Math.abs(c.x) <= halfW - radius + 1e-9 &&
+            Math.abs(c.z) <= halfD - radius + 1e-9
+        )
+        .map((c) => ({ x: c.x, z: c.z, y: heightAt(c) }))
+        .sort((a, b) => distanceFromPile(a) - distanceFromPile(b));
+      if (!candidates.length) break;
+      const y = Math.max(...candidates.map((c) => c.y));
+      const accepted: Spot[] = [];
+      for (const c of candidates) {
+        if (spots.length + accepted.length >= count) break;
+        if (accepted.some((a) => Math.hypot(a.x - c.x, a.z - c.z) < radius * 2.001)) continue;
+        accepted.push({ x: c.x, y, z: c.z });
+      }
+      if (!accepted.length) break;
+      accepted.sort(sortPlan);
+      for (const p of accepted) spots.push(p);
     }
   }
 

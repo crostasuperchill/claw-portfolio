@@ -6,7 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
     />
-    <meta name="theme-color" content="#E9E9E7" />
+    <meta name="theme-color" content="#ced1da" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Davide Barbieri — Prize Catcher</title>
@@ -27,7 +27,7 @@
   <body>
     <canvas id="stage"></canvas>
 
-    <div id="boot">
+    <div id="boot" aria-live="polite">
       <div class="boot-inner">
         <div class="boot-mark">けんびき</div>
         <div class="boot-sub">Prize Catcher</div>
@@ -36,7 +36,7 @@
       </div>
     </div>
 
-    <header id="hud">
+    <header id="hud" aria-hidden="true">
       <div class="hud-left">
         <div id="hud-dots"></div>
         <div id="hud-count">0/6</div>
@@ -70,7 +70,7 @@
       </button>
     </header>
 
-    <div id="hint">
+    <div id="hint" aria-hidden="true">
       <span class="hint-item">Move the stick</span>
       <span class="hint-item">Hit the button</span>
     </div>

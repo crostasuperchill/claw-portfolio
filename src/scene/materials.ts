@@ -1,11 +1,34 @@
 import * as THREE from 'three';
-import { D } from './dims';
+import { D, REF } from './dims';
 
 /* ---------- cached lightweight procedural helpers ---------- */
 
 let grainTex: THREE.Texture | null = null;
 let peelTex: THREE.DataTexture | null = null;
 let brushTex: THREE.Texture | null = null;
+
+/** GPU max anisotropy, shared by the studio renderer (see studio.ts). */
+let maxAniso = 8;
+
+export function setMaxAnisotropy(n: number) {
+  maxAniso = Math.max(1, Math.min(16, Math.floor(n) || 1));
+  for (const t of [grainTex, peelTex, brushTex]) {
+    if (t && t.anisotropy !== maxAniso) {
+      t.anisotropy = maxAniso;
+      t.needsUpdate = true;
+    }
+  }
+  return maxAniso;
+}
+
+/** Keep printed / backlit art crisp at grazing angles. */
+function sharpenTexture<T extends THREE.Texture | null | undefined>(tex: T): T {
+  if (tex && tex.anisotropy !== maxAniso) {
+    tex.anisotropy = maxAniso;
+    tex.needsUpdate = true;
+  }
+  return tex;
+}
 
 function rand(seed: number) {
   let s = seed >>> 0;
@@ -79,62 +102,62 @@ export function brushedRoughness() {
   return t;
 }
 
-/* ---------- materials (fast MeshStandardMaterial for crisp 60+ fps) ---------- */
+/* ---------- materials: satin-gloss 2D/3D vinyl-toy illustration ---------- */
 
 export const plastic = (color: string, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
   new THREE.MeshStandardMaterial({
     color,
-    metalness: 0.02,
-    roughness: 0.24,
-    envMapIntensity: 1.0,
+    metalness: 0.03,
+    roughness: 0.3,
+    envMapIntensity: 0.65,
     ...opts,
   });
 
 /** bright silver chrome that stays gleaming under studio lighting */
 export const chrome = () =>
   new THREE.MeshStandardMaterial({
-    color: '#eef3f8',
-    metalness: 0.78,
-    roughness: 0.18,
-    envMapIntensity: 1.45,
+    color: REF.chrome,
+    metalness: 0.82,
+    roughness: 0.22,
+    envMapIntensity: 1.1,
   });
 
 /** satin brushed aluminium */
 export const brushedMetal = () =>
   new THREE.MeshStandardMaterial({
     color: '#ccd3dc',
-    metalness: 0.65,
-    roughness: 0.34,
-    envMapIntensity: 1.25,
+    metalness: 0.62,
+    roughness: 0.36,
+    envMapIntensity: 0.9,
   });
 
 /** dark anodised aluminium */
 export const anodized = (color = '#30343b') =>
   new THREE.MeshStandardMaterial({
     color,
-    metalness: 0.55,
-    roughness: 0.38,
-    envMapIntensity: 1.0,
+    metalness: 0.5,
+    roughness: 0.4,
+    envMapIntensity: 0.7,
   });
 
 /** matte rubber: feet, gaskets */
 export const rubber = () =>
   new THREE.MeshStandardMaterial({
     color: '#1b181c',
-    roughness: 0.88,
+    roughness: 0.9,
     metalness: 0,
-    envMapIntensity: 0.4,
+    envMapIntensity: 0.3,
   });
 
 export const smokedAcrylic = () =>
   new THREE.MeshStandardMaterial({
     color: '#2a3038',
     metalness: 0,
-    roughness: 0.08,
+    roughness: 0.1,
     transparent: true,
-    opacity: 0.42,
+    opacity: 0.4,
     side: THREE.DoubleSide,
-    envMapIntensity: 1.3,
+    envMapIntensity: 0.9,
     depthWrite: false,
   });
 
@@ -142,33 +165,33 @@ export const clearAcrylic = () =>
   new THREE.MeshStandardMaterial({
     color: '#eef6ff',
     metalness: 0,
-    roughness: 0.06,
+    roughness: 0.05,
     transparent: true,
     opacity: 0.07,
     side: THREE.DoubleSide,
-    envMapIntensity: 1.3,
+    envMapIntensity: 0.9,
     depthWrite: false,
   });
 
 export const glassFake = (opts: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
   new THREE.MeshStandardMaterial({
-    color: '#f4f9ff',
-    metalness: 0.05,
-    roughness: 0.05,
+    color: '#eef9ff',
+    metalness: 0.02,
+    roughness: 0.04,
     transparent: true,
     opacity: 0.06,
     side: THREE.DoubleSide,
     depthWrite: false,
-    envMapIntensity: 1.4,
+    envMapIntensity: 1.0,
     ...opts,
   });
 
 export const matte = (color: string) =>
   new THREE.MeshStandardMaterial({
     color,
-    roughness: 0.88,
+    roughness: 0.92,
     metalness: 0,
-    envMapIntensity: 0.35,
+    envMapIntensity: 0.2,
   });
 
 export const glow = (color: string, intensity = 1.0) =>
@@ -176,52 +199,52 @@ export const glow = (color: string, intensity = 1.0) =>
     color,
     emissive: new THREE.Color(color),
     emissiveIntensity: intensity,
-    roughness: 0.3,
+    roughness: 0.35,
     metalness: 0,
-    envMapIntensity: 0.4,
+    envMapIntensity: 0.25,
   });
 
-/* ---------- candy palette: bright kawaii arcade cabinet ---------- */
+/* ---------- candy palette sampled from reference/target.png ---------- */
 
 export const CAB = {
-  pink: '#f59ec6',
-  pinkDeep: '#e56da6',
+  pink: REF.framePink, // #f4a9d2
+  pinkDeep: REF.framePinkShade, // #e19ecb
   pinkInk: '#d9458c',
   pinkPale: '#ffdcf0',
-  azure: '#3594e8',
-  azureMid: '#5cb5f7',
-  azureDeep: '#2275cc',
+  azure: REF.sidePostBlue, // #1e9be0
+  azureMid: REF.panelBlue, // #68bff2
+  azureDeep: REF.bandBlue, // #2b8dca
   azurePale: '#d6f0ff',
-  white: '#fcf9f7',
-  yellow: '#ffd228',
-  red: '#ec2934',
-  ink: '#1a1620',
+  white: REF.bottomWhite, // #f2f3f6
+  yellow: REF.buttonYellow, // #ffd84a
+  red: REF.knobRed, // #d2131b
+  ink: REF.ink, // #151517
 } as const;
 
 export const candy = (color: string, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
   plastic(color, {
-    roughness: 0.2,
-    metalness: 0.02,
-    envMapIntensity: 1.05,
+    roughness: 0.26,
+    metalness: 0.03,
+    envMapIntensity: 0.7,
     ...opts,
   });
 
 export const printed = (map: THREE.Texture, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
   new THREE.MeshStandardMaterial({
-    map,
-    roughness: 0.36,
+    map: sharpenTexture(map),
+    roughness: 0.42,
     metalness: 0,
-    envMapIntensity: 0.75,
+    envMapIntensity: 0.55,
     ...opts,
   });
 
 export const backlit = (map: THREE.Texture, intensity = 0.28) =>
   printed(map, {
     emissive: new THREE.Color('#ffffff'),
-    emissiveMap: map,
+    emissiveMap: sharpenTexture(map),
     emissiveIntensity: intensity,
-    roughness: 0.26,
-    envMapIntensity: 0.55,
+    roughness: 0.3,
+    envMapIntensity: 0.45,
   });
 
 export const PALETTE = D.colors;

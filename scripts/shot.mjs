@@ -23,13 +23,14 @@ async function shoot(name, device) {
     .waitForFunction(() => window.__claw?.ready === true, null, { timeout: 60000 })
     .catch(() => logs.push('ready timeout'));
   await page.waitForTimeout(2500);
-  await page.screenshot({ path: `artifacts/${name}.png` });
+  await page.screenshot({ path: `artifacts/${PREFIX}${name}.png` });
   console.log(`--- ${name} ---`);
   console.log(logs.slice(0, 25).join('\n'));
   await ctx.close();
 }
 
 const only = process.env.ONLY;
+const PREFIX = process.env.PREFIX ?? "";
 if (!only || only === 'iphone') await shoot('iphone', 'iPhone 13');
 if (!only || only === 'desktop') await shoot('desktop', null);
 await browser.close();

@@ -66,6 +66,21 @@ const STICKERS: StickerSpec[] = [
   { label: 'COIN RETURN', text: 'COIN RETURN', style: 'plate', bg: WHITE, fg: INK, border: AZURE_LIGHT, code: '返却' },
 ];
 
+/* Re-paint the atlas once custom Japanese/rounded fonts settle, keeping the
+ * exact same layout so the published UV rects stay valid. */
+const fontRepaints = new Set<() => void>();
+let fontsSettled = false;
+
+function settleFonts() {
+  fontsSettled = true;
+  for (const repaint of fontRepaints) repaint();
+}
+
+if (typeof document !== 'undefined' && document.fonts) {
+  document.fonts.ready.then(settleFonts).catch(() => undefined);
+  document.fonts.addEventListener?.('loadingdone', settleFonts);
+}
+
 let measureCtx: CanvasRenderingContext2D | null = null;
 
 function measure() {
@@ -328,11 +343,10 @@ function packStickers(items: StickerSpec[], S: number, size: number) {
   return { cells, bottom: y + rowH + PAD };
 }
 
-export function buildDecalAtlas(size = 1536) {
+export function buildDecalAtlas(size = 2048) {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
   const g = canvas.getContext('2d')!;
-  g.imageSmoothingQuality = 'high';
 
   let S = (1.42 * size) / 2048;
   let packed = packStickers(STICKERS, S, size);
@@ -344,16 +358,29 @@ export function buildDecalAtlas(size = 1536) {
   const rects: Record<string, UvRect> = {};
   const RAD = 30 * S;
 
+  const paint = () => {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, size, size);
+    g.imageSmoothingQuality = 'high';
+    for (const cell of packed.cells) {
+      const { spec, w, h } = cell;
+      const rot = spec.rot ?? 0;
+      const cx = cell.x + cell.w / 2;
+      const cy = cell.y + cell.h / 2;
+      g.save();
+      g.translate(cx, cy);
+      g.rotate(rot);
+      drawSticker(g, spec, w, h);
+      g.restore();
+    }
+  };
+  paint();
+
   for (const cell of packed.cells) {
     const { spec, w, h } = cell;
     const rot = spec.rot ?? 0;
     const cx = cell.x + cell.w / 2;
     const cy = cell.y + cell.h / 2;
-    g.save();
-    g.translate(cx, cy);
-    g.rotate(rot);
-    drawSticker(g, spec, w, h);
-    g.restore();
 
     const c = Math.abs(Math.cos(rot));
     const s = Math.abs(Math.sin(rot));
@@ -373,10 +400,18 @@ export function buildDecalAtlas(size = 1536) {
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 16;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
   tex.generateMipmaps = true;
+
+  const repaint = () => {
+    paint();
+    tex.needsUpdate = true;
+  };
+  if (fontsSettled) repaint();
+  else fontRepaints.add(repaint);
+
   return { texture: tex, rects };
 }
 
