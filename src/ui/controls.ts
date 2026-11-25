@@ -60,9 +60,9 @@ export function createControls(opts: {
     }
 
     const stick = opts.stickCenter();
-    const nearStick = dist(p, stick) < STICK_R * 1.5;
-    // fascia del deck: una banda attorno alla riga dei comandi
-    const onDeck = Math.abs(p.y - stick.y) < 150;
+    const nearStick = dist(p, stick) < STICK_R * 0.9;
+    // fascia del deck (sotto la vetrina, fino alla zona comandi inferiore)
+    const onDeck = p.y >= stick.y - 65 && p.y <= stick.y + 185;
     if (!nearStick && !onDeck) return;
 
     active = true;

@@ -19,7 +19,7 @@ import { createPrizeCard } from './ui/prizeCard';
 import { createAudio } from './ui/audio';
 import { createHud } from './ui/hud';
 
-const FILL_TINTS = ['#f7c9d9', '#bcd6ff', '#ffe6a7', '#c8f0e0', '#e3d2ff', '#ffd6bd'];
+const FILL_TINTS = ['#ff88bc', '#66c2ff', '#ffe066', '#6be8be', '#b894ff', '#ffa375'];
 const HOME = D.clawHomeY;
 const DROP = D.clawDropY;
 
@@ -38,7 +38,6 @@ async function boot() {
   const atlas = buildDecalAtlas();
   const cabinet = buildCabinet(atlas.texture, atlas.rects);
   mergeStatic(cabinet.root, {
-    // qualunque parte animata (levetta, cap del bottone, dita) resta fuori dal merge
     skip: (mesh) => {
       let node: THREE.Object3D | null = mesh;
       while (node) {
@@ -88,17 +87,16 @@ async function boot() {
   const field = new CapsuleField(fillSpots.length, D.capsuleR);
   studio.scene.add(field.group);
 
-  // ciondoli appesi dentro la teca, come nella reference
   const charms = buildCharms({
     labels: [
-      { text: 'WEB DEV', color: '#f04d95' },
-      { text: 'FRONT-END', color: '#3aa6e8' },
-      { text: 'UX/UI', color: '#8a5fe6' },
-      { text: '3D ART', color: '#43cfa0' },
+      { text: 'Web Dev', color: '#ff82b8' },
+      { text: 'Front-end', color: '#4cb5ff' },
+      { text: 'UX/UI', color: '#5ee0c4' },
+      { text: '3D Art', color: '#b492ff' },
     ],
     topY: 1.29,
-    z: -0.16,
-    halfWidth: 0.33,
+    z: -0.17,
+    halfWidth: 0.34,
   });
   studio.scene.add(charms.group);
   const tmpMatrix = new THREE.Matrix4();
@@ -279,7 +277,6 @@ async function boot() {
     acc += dt;
     if (cycle.phase === 'idle' && !cardOpen) claw.aim(stickX * 0.42 * dt, -stickY * 0.3 * dt);
 
-    // levetta: molla verso la posizione inclinata, torna da sola al centro
     const stick = (cabinet as unknown as { stick?: THREE.Object3D }).stick;
     if (stick) {
       const k = Math.min(1, dt * 16);
@@ -301,29 +298,32 @@ async function boot() {
 
     claw.update(dt);
     cabinet.update(dt);
-    charms.update(performance.now() / 1000);
+    charms.update(now / 1000);
 
+    const forceSync = shadowFrames < 3;
+    let anyInstDirty = forceSync;
     for (const ref of refs.values()) {
       if (ref.collected) continue;
+      if (!forceSync && ref.body.isSleeping()) continue;
       const t = ref.body.translation();
       const r = ref.body.rotation();
       if (ref.instance !== undefined) {
         tmpPos.set(t.x, t.y, t.z);
         tmpQuat.set(r.x, r.y, r.z, r.w);
         field.setMatrix(ref.instance, tmpMatrix.compose(tmpPos, tmpQuat, boxScale));
+        anyInstDirty = true;
       } else if (ref.mesh) {
         ref.mesh.position.set(t.x, t.y, t.z);
         ref.mesh.quaternion.set(r.x, r.y, r.z, r.w);
       }
     }
-    field.commit();
+    if (anyInstDirty) field.commit();
 
     if (pendingPrize) {
       const t = pendingPrize.body.translation();
       if (t.y < 0.56) deliver(pendingPrize);
     }
 
-    // capsule cadute nello chute e non premiate: via, altrimenti si impilano nel pozzo
     const lost: BodyRef[] = [];
     for (const ref of refs.values()) {
       if (ref.collected || ref === pendingPrize) continue;
@@ -343,34 +343,9 @@ async function boot() {
     requestAnimationFrame(frame);
   }
 
-  // Il transmission di three sfoca quello che sta dietro (interno illeggibile).
-  // Lo azzeriamo, ma lasciamo a ogni materiale la sua opacità/riflessione:
-  // vetro e calotte restano lucidi, il contenuto resta nitido.
-  studio.scene.traverse((o) => {
-    const mesh = o as THREE.Mesh;
-    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    for (const m of mats) {
-      const mat = m as THREE.MeshPhysicalMaterial | undefined;
-      if (!mat || !('transmission' in mat) || !mat.transmission) continue;
-      mat.transmission = 0;
-      mat.transparent = true;
-      mat.depthWrite = false;
-      mat.envMapIntensity = Math.max(mat.envMapIntensity ?? 1, 3.2);
-      mat.needsUpdate = true;
-    }
-  });
-
   studio.renderer.compile(studio.scene, studio.camera);
 
-  requestAnimationFrame((t) => {
-    last = t;
-    frame(t);
-    bootFill.style.width = '100%';
-    setTimeout(() => bootEl.classList.add('done'), 220);
-    (window as unknown as { __claw: Record<string, unknown> }).__claw.ready = true;
-  });
-
-  (window as unknown as { __claw: Record<string, unknown> }).__claw = {
+  const api = {
     ready: false,
     state: () => cycle.phase,
     aim: (x: number, z: number) => claw.target.set(x, z),
@@ -465,6 +440,15 @@ async function boot() {
         poll();
       }),
   };
+  (window as unknown as { __claw: typeof api }).__claw = api;
+
+  requestAnimationFrame((t) => {
+    last = t;
+    frame(t);
+    bootFill.style.width = '100%';
+    setTimeout(() => bootEl.classList.add('done'), 220);
+    api.ready = true;
+  });
 }
 
 void boot();
