@@ -19,9 +19,15 @@ import { createPrizeCard } from './ui/prizeCard';
 import { createAudio } from './ui/audio';
 import { createHud } from './ui/hud';
 
-const FILL_TINTS = ['#ff8cc6', '#6ee294', '#ffe268', '#6ec4ff', '#be94ff', '#ff6e8a', '#8cf0dc'];
+// Vivid jewel-toned candy palette matching reference/target.png
+const FILL_TINTS = ['#f43292', '#14c45c', '#f8c214', '#149cf8', '#8c42f2', '#f43854', '#18ccb8'];
 const HOME = D.clawHomeY;
-const DROP = D.clawDropY;
+
+// Reference left-to-right hero showcase order:
+// pink Tamagotchi -> silver GBA -> red Tamagotchi -> blue Front-end floppy -> pink 3D Art floppy -> grey Game Boy
+const SHOWCASE_ORDER = ['jollycat', 'magicwall', 'zora', 'polaroids', 'contact', 'oracle'] as const;
+const SHOWCASE_TILT_Z = [0.22, 0.24, -0.18, -0.2, -0.14, -0.26];
+const SHOWCASE_TILT_Y = [0.14, 0.04, -0.02, -0.08, -0.04, -0.16];
 
 const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -75,34 +81,60 @@ async function boot() {
     const bandEnd = Math.max(bandStart + 1, Math.floor(((i + 1) * byX.length) / PROJECTS.length));
     const band = byX.slice(bandStart, bandEnd).filter((s) => !prizeSpots.includes(s));
     const pick = (band.length ? band : topLayer.filter((s) => !prizeSpots.includes(s))).sort(
-      (a, b) => b.y * 2 + b.z - (a.y * 2 + a.z)
+      (a, b) => b.y * 2 + b.z * 1.4 - (a.y * 2 + a.z * 1.4)
     )[0];
     if (pick) prizeSpots.push(pick);
   }
+  prizeSpots.sort((a, b) => a.x - b.x);
+  // Within the middle pair [2, 3], put the frontmost spot in slot 2 (red Tamagotchi) and back/higher in slot 3 (blue floppy).
+  if (prizeSpots.length >= 5 && prizeSpots[3].z > prizeSpots[2].z) {
+    [prizeSpots[2], prizeSpots[3]] = [prizeSpots[3], prizeSpots[2]];
+  }
+  // Ensure slot 4 (pink 3D Art floppy) gets the higher spot between [3, 4] if needed.
+  if (prizeSpots.length >= 5 && prizeSpots[3].y > prizeSpots[4].y + 0.02) {
+    [prizeSpots[3], prizeSpots[4]] = [prizeSpots[4], prizeSpots[3]];
+  }
+
+  // Hanging charms suspended from the rear chrome rail so they sit cleanly behind the main claw plane
+  // and physically swing/deflect if the claw moves near them.
   const charms = buildCharms({
     labels: [
       { text: 'Web Dev', color: '#ff82b8' },
-      { text: 'UX/UI', color: '#5ee0c4' },
-      { text: 'Front-end', color: '#4cb5ff' },
+      { text: 'UX/UI', color: '#4cd8d0' },
+      { text: 'Front-end', color: '#4468ec' },
     ],
-    topY: 1.275,
-    z: -0.06,
+    topY: 1.288,
+    z: -0.19,
     halfWidth: 0.34,
   });
 
   const refs = new Map<number, BodyRef>();
+  const heroInitQuats = new Map<number, THREE.Quaternion>();
+  const heroTumbleBlend = new Map<number, number>();
   const prizeRoot = new THREE.Group();
   studio.scene.add(prizeRoot);
 
-  PROJECTS.forEach((p, i) => {
+  const orderedProjects = SHOWCASE_ORDER.map((id) => byId(id)).filter(
+    (p): p is (typeof PROJECTS)[number] => Boolean(p)
+  );
+  const heroProjects = orderedProjects.length === PROJECTS.length ? orderedProjects : PROJECTS;
+
+  heroProjects.forEach((p, i) => {
     const spot = prizeSpots[i];
     const mesh = makeCapsule({ project: p, radius: D.capsuleR });
     mergeStatic(mesh);
     mesh.position.set(spot.x, spot.y, spot.z);
-    mesh.rotation.z = (i % 2 === 0 ? 1 : -1) * (0.14 + (i % 3) * 0.06);
-    mesh.rotation.y = (i - 2.5) * 0.08;
+    const initEuler = new THREE.Euler(
+      -0.06,
+      SHOWCASE_TILT_Y[i] ?? (i - 2.5) * 0.08,
+      SHOWCASE_TILT_Z[i] ?? (i % 2 === 0 ? 1 : -1) * 0.18
+    );
+    const initQ = new THREE.Quaternion().setFromEuler(initEuler);
+    mesh.quaternion.copy(initQ);
     prizeRoot.add(mesh);
     const { body, collider } = addCapsule(world, spot, D.capsuleR);
+    heroInitQuats.set(collider.handle, initQ);
+    heroTumbleBlend.set(collider.handle, 0);
     refs.set(collider.handle, { body, collider, projectId: p.id, mesh });
   });
 
@@ -113,6 +145,8 @@ async function boot() {
   const tmpMatrix = new THREE.Matrix4();
   const tmpPos = new THREE.Vector3();
   const tmpQuat = new THREE.Quaternion();
+  const tmpWobble = new THREE.Quaternion();
+  const tmpEuler = new THREE.Euler();
   const boxScale = new THREE.Vector3(1, 1, 1);
   fillSpots.forEach((spot, i) => {
     const { body, collider } = addCapsule(world, spot, D.capsuleR);
@@ -127,7 +161,7 @@ async function boot() {
   const claw = new Claw(world, refs);
   claw.target.set(-0.2, 0.02);
   claw.pos.set(-0.2, 0.02);
-  claw.update(0);
+  claw.update(0, false);
   studio.scene.add(claw.root);
 
   bootFill.style.width = '84%';
@@ -155,6 +189,7 @@ async function boot() {
 
   let grabTried = false;
   let pendingPrize: BodyRef | null = null;
+  let activeDropY: number = D.clawDropY;
   let fpsAvg = 60;
 
   const hint = document.getElementById('hint') as HTMLElement;
@@ -167,6 +202,8 @@ async function boot() {
     claw.release();
     claw.setGrip(1);
     claw.setHeight(HOME);
+    // Compute full realistic drop depth beneath current (x, z) — down to prize equator or near-floor
+    activeDropY = claw.computeDropHeight();
     cycle.start();
     cabinet.pressButton();
     cabinet.setButtonEnabled(false);
@@ -200,16 +237,16 @@ async function boot() {
 
   function applyPhase() {
     if (cycle.phase === 'drop') {
-      claw.setHeight(lerp(HOME, DROP, easeInOut(cycle.k)));
+      claw.setHeight(lerp(HOME, activeDropY, easeInOut(cycle.k)));
     } else if (cycle.phase === 'close') {
       claw.setGrip(1 - cycle.k);
-      if (!grabTried && cycle.k > 0.55) {
+      if (!grabTried && cycle.k > 0.52) {
         grabTried = true;
         claw.tryGrab();
         if (claw.grabbed) audio.grabSuccess();
       }
     } else if (cycle.phase === 'lift') {
-      claw.setHeight(lerp(DROP, HOME, easeInOut(cycle.k)));
+      claw.setHeight(lerp(activeDropY, HOME, easeInOut(cycle.k)));
     }
   }
 
@@ -233,8 +270,8 @@ async function boot() {
   }
 
   const stickWorld = new THREE.Vector3();
-  function project(world: THREE.Vector3) {
-    const v = world.clone().project(studio.camera);
+  function project(worldPos: THREE.Vector3) {
+    const v = worldPos.clone().project(studio.camera);
     const r = canvas.getBoundingClientRect();
     return { x: (v.x * 0.5 + 0.5) * r.width, y: (-v.y * 0.5 + 0.5) * r.height };
   }
@@ -255,6 +292,8 @@ async function boot() {
 
   let stickX = 0;
   let stickY = 0;
+  let camOffX = 0;
+  let camOffY = 0;
 
   createControls({
     canvas,
@@ -289,16 +328,28 @@ async function boot() {
     fpsAvg = fpsAvg * 0.94 + (1 / Math.max(dtRaw, 0.0001)) * 0.06;
 
     acc += dt;
-    if (cycle.phase === 'idle' && !cardOpen) claw.aim(stickX * 0.42 * dt, -stickY * 0.3 * dt);
+    const canAim = cycle.phase === 'idle' && !cardOpen;
+    const activelyAiming = canAim && Math.hypot(stickX, stickY) > 0.05;
+    if (canAim) claw.aim(stickX * 0.58 * dt, -stickY * 0.48 * dt);
 
+    // Subtle stick-driven camera parallax while aiming so Z depth reads intuitively
+    const wantCamX = activelyAiming ? stickX * 0.14 : 0;
+    const wantCamY = activelyAiming ? -stickY * 0.07 : 0;
+    const camK = Math.min(1, dt * 6);
+    camOffX += (wantCamX - camOffX) * camK;
+    camOffY += (wantCamY - camOffY) * camK;
+    studio.setParallax(camOffX, camOffY);
+
+    // Fixed joystick tilt: pushing UP (stickY > 0 -> claw goes -Z into cabinet) tilts top of stick BACKWARD (-X rotation)
     const stick = (cabinet as unknown as { stick?: THREE.Object3D }).stick;
     if (stick) {
-      const k = Math.min(1, dt * 16);
-      stick.rotation.z += (-stickX * 0.5 - stick.rotation.z) * k;
-      stick.rotation.x += (stickY * 0.38 - stick.rotation.x) * k;
+      const k = Math.min(1, dt * 18);
+      stick.rotation.z += (-stickX * 0.52 - stick.rotation.z) * k;
+      stick.rotation.x += (-stickY * 0.42 - stick.rotation.x) * k;
     }
+
     let steps = 0;
-    while (acc >= 1 / 60 && steps < 2) {
+    while (acc >= 1 / 60 && steps < 3) {
       world.step();
       acc -= 1 / 60;
       steps++;
@@ -310,15 +361,17 @@ async function boot() {
     if (cycle.phase !== before) enter(cycle.phase);
     applyPhase();
 
-    claw.update(dt);
+    claw.update(dt, activelyAiming);
     cabinet.update(dt);
-    charms.update(now / 1000);
+    charms.update(now / 1000, dt, claw.getCharmObstacles());
 
     const forceSync = shadowFrames < 3;
     let anyInstDirty = forceSync;
+    let anyBodyAwake = false;
     for (const ref of refs.values()) {
       if (ref.collected) continue;
       if (!forceSync && ref.body.isSleeping()) continue;
+      anyBodyAwake = true;
       const t = ref.body.translation();
       const r = ref.body.rotation();
       if (ref.instance !== undefined) {
@@ -328,6 +381,32 @@ async function boot() {
         anyInstDirty = true;
       } else if (ref.mesh) {
         ref.mesh.position.set(t.x, t.y, t.z);
+        const initQ = heroInitQuats.get(ref.collider.handle);
+        const isFree = ref === claw.grabbed || ref === pendingPrize;
+        const prevBlend = heroTumbleBlend.get(ref.collider.handle) ?? 0;
+        const nextBlend = prevBlend + ((isFree ? 1 : 0) - prevBlend) * Math.min(1, dt * 8);
+        heroTumbleBlend.set(ref.collider.handle, nextBlend);
+
+        if (initQ) {
+          // While resting on the capsule pile, keep the hero gadget facing forward (never rolled
+          // face-down by the underlying sphere collider) with subtle real-time velocity wobble.
+          // Once grabbed or falling into the chute, smoothly blend to full 3D Rapier rigid-body tumble!
+          const av = ref.body.angvel();
+          tmpEuler.set(
+            THREE.MathUtils.clamp(av.x * 0.08, -0.22, 0.22),
+            THREE.MathUtils.clamp(av.y * 0.06, -0.18, 0.18),
+            THREE.MathUtils.clamp(av.z * 0.08, -0.22, 0.22)
+          );
+          tmpWobble.setFromEuler(tmpEuler).multiply(initQ);
+          if (nextBlend > 0.01) {
+            tmpQuat.set(r.x, r.y, r.z, r.w).multiply(initQ);
+            ref.mesh.quaternion.copy(tmpWobble).slerp(tmpQuat, nextBlend);
+          } else {
+            ref.mesh.quaternion.copy(tmpWobble);
+          }
+        } else {
+          ref.mesh.quaternion.set(r.x, r.y, r.z, r.w);
+        }
       }
     }
     if (anyInstDirty) field.commit();
@@ -348,6 +427,12 @@ async function boot() {
       if (ref.instance !== undefined) field.hide(ref.instance);
       refs.delete(ref.collider.handle);
       world.removeRigidBody(ref.body);
+    }
+
+    // Keep shadow map crisp and live whenever the claw or any capsule is moving,
+    // without wasting GPU work while the scene is completely still.
+    if (shadowFrames >= 2 && (claw.isMoving || anyBodyAwake)) {
+      studio.sun.shadow.needsUpdate = true;
     }
 
     studio.renderer.render(studio.scene, studio.camera);
@@ -411,6 +496,7 @@ async function boot() {
       pending: pendingPrize?.projectId ?? null,
       grabTried,
       cardOpen,
+      activeDropY: +activeDropY.toFixed(3),
     }),
     projectPos: (id: string) => {
       const ref = [...refs.values()].find((r) => r.projectId === id);
@@ -442,7 +528,7 @@ async function boot() {
         claw.target.set(t.x, t.z);
         claw.pos.set(t.x, t.z);
         claw.setHeight(HOME);
-        claw.update(0);
+        claw.update(0, false);
         const t0 = performance.now();
         const poll = () => {
           if (cardOpen) return resolve(true);

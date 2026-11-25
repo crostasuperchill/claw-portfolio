@@ -102,51 +102,53 @@ export function brushedRoughness() {
   return t;
 }
 
-/* ---------- materials: satin-gloss 2D/3D vinyl-toy illustration ---------- */
+/* ---------- materials: glossy candy-coated arcade vinyl/plastic ---------- */
 
-export const plastic = (color: string, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
-  new THREE.MeshStandardMaterial({
+export const plastic = (color: string, opts: Partial<THREE.MeshPhysicalMaterialParameters> = {}) =>
+  new THREE.MeshPhysicalMaterial({
     color,
-    metalness: 0.03,
-    roughness: 0.3,
-    envMapIntensity: 0.65,
+    metalness: 0.02,
+    roughness: 0.22,
+    clearcoat: 0.55,
+    clearcoatRoughness: 0.14,
+    envMapIntensity: 0.85,
     ...opts,
   });
 
-/** bright silver chrome that stays gleaming under studio lighting */
+/** bright mirror-silver chrome that gleams under studio lighting */
 export const chrome = () =>
   new THREE.MeshStandardMaterial({
     color: REF.chrome,
-    metalness: 0.82,
-    roughness: 0.22,
-    envMapIntensity: 1.1,
+    metalness: 0.9,
+    roughness: 0.12,
+    envMapIntensity: 1.5,
   });
 
 /** satin brushed aluminium */
 export const brushedMetal = () =>
   new THREE.MeshStandardMaterial({
-    color: '#ccd3dc',
-    metalness: 0.62,
-    roughness: 0.36,
-    envMapIntensity: 0.9,
+    color: '#d4dce6',
+    metalness: 0.7,
+    roughness: 0.28,
+    envMapIntensity: 1.15,
   });
 
 /** dark anodised aluminium */
-export const anodized = (color = '#30343b') =>
+export const anodized = (color = '#2b3038') =>
   new THREE.MeshStandardMaterial({
     color,
-    metalness: 0.5,
-    roughness: 0.4,
-    envMapIntensity: 0.7,
+    metalness: 0.55,
+    roughness: 0.35,
+    envMapIntensity: 0.85,
   });
 
 /** matte rubber: feet, gaskets */
 export const rubber = () =>
   new THREE.MeshStandardMaterial({
-    color: '#1b181c',
-    roughness: 0.9,
-    metalness: 0,
-    envMapIntensity: 0.3,
+    color: '#19171c',
+    roughness: 0.86,
+    metalness: 0.02,
+    envMapIntensity: 0.35,
   });
 
 export const smokedAcrylic = () =>
@@ -169,7 +171,7 @@ export const clearAcrylic = () =>
     transparent: true,
     opacity: 0.07,
     side: THREE.DoubleSide,
-    envMapIntensity: 0.9,
+    envMapIntensity: 1.0,
     depthWrite: false,
   });
 
@@ -182,68 +184,70 @@ export const glassFake = (opts: Partial<THREE.MeshStandardMaterialParameters> = 
     opacity: 0.06,
     side: THREE.DoubleSide,
     depthWrite: false,
-    envMapIntensity: 1.0,
+    envMapIntensity: 1.15,
     ...opts,
   });
 
 export const matte = (color: string) =>
   new THREE.MeshStandardMaterial({
     color,
-    roughness: 0.92,
-    metalness: 0,
-    envMapIntensity: 0.2,
-  });
-
-export const glow = (color: string, intensity = 1.0) =>
-  new THREE.MeshStandardMaterial({
-    color,
-    emissive: new THREE.Color(color),
-    emissiveIntensity: intensity,
-    roughness: 0.35,
+    roughness: 0.88,
     metalness: 0,
     envMapIntensity: 0.25,
   });
 
-/* ---------- candy palette sampled from reference/target.png ---------- */
+export const glow = (color: string, intensity = 1.15) =>
+  new THREE.MeshStandardMaterial({
+    color,
+    emissive: new THREE.Color(color),
+    emissiveIntensity: intensity,
+    roughness: 0.28,
+    metalness: 0,
+    envMapIntensity: 0.35,
+  });
+
+/* ---------- vivid candy palette sampled from reference/target.png ---------- */
 
 export const CAB = {
-  pink: REF.framePink, // #f4a9d2
-  pinkDeep: REF.framePinkShade, // #e19ecb
-  pinkInk: '#d9458c',
-  pinkPale: '#ffdcf0',
-  azure: REF.sidePostBlue, // #1e9be0
-  azureMid: REF.panelBlue, // #68bff2
-  azureDeep: REF.bandBlue, // #2b8dca
-  azurePale: '#d6f0ff',
-  white: REF.bottomWhite, // #f2f3f6
-  yellow: REF.buttonYellow, // #ffd84a
-  red: REF.knobRed, // #d2131b
-  ink: REF.ink, // #151517
+  pink: REF.framePink,
+  pinkDeep: REF.framePinkShade,
+  pinkInk: '#e02888',
+  pinkPale: '#ffd6ec',
+  azure: REF.sidePostBlue,
+  azureMid: REF.panelBlue,
+  azureDeep: REF.bandBlue,
+  azurePale: '#cceeff',
+  white: REF.bottomWhite,
+  yellow: REF.buttonYellow,
+  red: REF.knobRed,
+  ink: REF.ink,
 } as const;
 
-export const candy = (color: string, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
+export const candy = (color: string, opts: Partial<THREE.MeshPhysicalMaterialParameters> = {}) =>
   plastic(color, {
-    roughness: 0.26,
-    metalness: 0.03,
-    envMapIntensity: 0.7,
+    roughness: 0.2,
+    metalness: 0.02,
+    clearcoat: 0.62,
+    clearcoatRoughness: 0.12,
+    envMapIntensity: 0.95,
     ...opts,
   });
 
 export const printed = (map: THREE.Texture, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
   new THREE.MeshStandardMaterial({
     map: sharpenTexture(map),
-    roughness: 0.42,
+    roughness: 0.32,
     metalness: 0,
     envMapIntensity: 0.55,
     ...opts,
   });
 
-export const backlit = (map: THREE.Texture, intensity = 0.28) =>
+export const backlit = (map: THREE.Texture, intensity = 0.42) =>
   printed(map, {
     emissive: new THREE.Color('#ffffff'),
     emissiveMap: sharpenTexture(map),
     emissiveIntensity: intensity,
-    roughness: 0.3,
+    roughness: 0.22,
     envMapIntensity: 0.45,
   });
 

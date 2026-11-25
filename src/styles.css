@@ -6,8 +6,8 @@
 :root {
   color-scheme: light;
 
-  --bg: #ced1da;
-  --bg-deep: #dfe2eb;
+  --bg: #e2e5ed;
+  --bg-deep: #eceef5;
   --ink: #1b1d26;
   --ink-80: rgba(27, 29, 38, 0.8);
   --ink-70: rgba(27, 29, 38, 0.68);
@@ -15,9 +15,9 @@
   --ink-40: rgba(27, 29, 38, 0.38);
   --muted: #6d7180;
 
-  --pink: #f2a7c3;
-  --blue: #2b4bff;
-  --yellow: #ffc21a;
+  --pink: #f795c8;
+  --blue: #0b93ec;
+  --yellow: #ffd226;
 
   --paper: #fcfcfe;
   --card: rgba(252, 252, 254, 0.92);
@@ -257,9 +257,18 @@ html.card-open body::after {
   box-shadow: var(--shadow-sheet);
   -webkit-backdrop-filter: blur(30px) saturate(1.5);
   backdrop-filter: blur(30px) saturate(1.5);
-  transform: translate3d(0, 108%, 0);
+  transform: translate3d(0, calc(108% + 64px), 0);
+  visibility: hidden;
   overflow: hidden;
   will-change: transform;
+}
+
+#card.open,
+#card.entering,
+#card.closing,
+#card.dragging,
+#card.settling {
+  visibility: visible;
 }
 
 #card.open {
@@ -288,7 +297,7 @@ html.card-open body::after {
 
 @keyframes sheetIn {
   0% {
-    transform: translate3d(0, 104%, 0);
+    transform: translate3d(0, calc(104% + 48px), 0);
   }
   64% {
     transform: translate3d(0, -1.2%, 0);
@@ -307,7 +316,7 @@ html.card-open body::after {
     opacity: 1;
   }
   100% {
-    transform: translate3d(0, 106%, 0);
+    transform: translate3d(0, calc(106% + 48px), 0);
     opacity: 0.7;
   }
 }

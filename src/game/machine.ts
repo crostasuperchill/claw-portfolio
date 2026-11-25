@@ -3,24 +3,22 @@ export type Phase = 'idle' | 'drop' | 'close' | 'lift' | 'carry' | 'release' | '
 export const ORDER = ['drop', 'close', 'lift', 'carry', 'release', 'return'] as const;
 
 /**
- * Durate delle fasi (secondi). Il ciclo completo resta sotto i 6 s:
- * 1.35 + 0.9 + 1.05 + 0.9 + 0.3 + 0.9 = 5.4 s.
- * La discesa e' la fase piu' lunga (il claw deve "pesare"); il ritorno e'
- * piu' rapido dell'andata.
+ * Durate delle fasi (secondi). Ciclo snello e scattante (~4.0 s, ben sotto i 6 s):
+ * 0.98 + 0.62 + 0.82 + 0.70 + 0.24 + 0.64 = 4.00 s.
  */
 export const DURATION = {
-  drop: 1.35,
-  close: 0.9,
-  lift: 1.05,
-  carry: 0.9,
-  release: 0.3,
-  return: 0.9,
+  drop: 0.98,
+  close: 0.62,
+  lift: 0.82,
+  carry: 0.7,
+  release: 0.24,
+  return: 0.64,
 };
 
 /** Pausa in fondo alla discesa prima che le chele inizino a chiudersi (s). */
-export const CLOSE_PAUSE = 0.2;
+export const CLOSE_PAUSE = 0.11;
 /** Durata della chiusura vera e propria dopo la pausa (s). */
-export const CLOSE_STROKE = 0.45;
+export const CLOSE_STROKE = 0.34;
 
 const clamp01 = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
 
@@ -50,11 +48,9 @@ export class Cycle {
 
   /**
    * Progresso della fase, gia' sagomato.
-   * - drop: 55 ms di "engage" meccanico, poi una rampa che decelera gia' in
-   *   fondo (il chiamante applica easeInOut per l'atterraggio morbido).
-   * - close: 200 ms di pausa, poi chiusura rapida con snap (ease-out cubica).
-   * - lift: 30 ms di carico, poi rampa smoothstep: il peso e' reso dalla
-   *   molla verticale del claw (hOff), non da un overshoot artificiale.
+   * - drop: breve engage meccanico (4%), poi discesa decisa che atterra morbida.
+   * - close: breve pausa di assestamento, poi chiusura rapida con snap cubico.
+   * - lift: 2.5% di presa carico, poi risalita fluida con peso.
    * - carry/release/return: lineari.
    */
   get k(): number {
@@ -63,12 +59,12 @@ export class Cycle {
     const u = clamp01(this.t / dur);
     switch (this.phase) {
       case 'drop': {
-        const hold = 0.055;
+        const hold = 0.04;
         const r = clamp01((u - hold) / (1 - hold));
-        return 1 - Math.pow(1 - r, 1.6);
+        return 1 - Math.pow(1 - r, 1.55);
       }
       case 'lift': {
-        const hold = 0.03;
+        const hold = 0.025;
         const r = clamp01((u - hold) / (1 - hold));
         return smoothstep(r);
       }

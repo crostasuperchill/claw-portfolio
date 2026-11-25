@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { CAB, backlit, candy, chrome, glow, matte, plastic, printed, rubber } from './materials';
+import { backlit, candy, chrome, glow, matte, printed, rubber } from './materials';
 import { decalMesh } from './decals';
 import { REF } from './dims';
 import type { UvRect } from '../contracts';
@@ -19,10 +19,6 @@ function canvas(w: number, h: number) {
   return c;
 }
 
-/* Custom Japanese / rounded web fonts may finish loading after the first
- * paint. Keep every printed canvas' repaint closure so we can redraw it once
- * the font set settles — otherwise the marquee and stickers stay blurry or
- * fall back to a system face. */
 const fontRepaints = new Set<() => void>();
 let fontsSettled = false;
 
@@ -109,11 +105,11 @@ function drawUfo(g: CanvasRenderingContext2D, x: number, y: number, s = 1, beam 
 
   if (beam) {
     const beamGrad = g.createLinearGradient(0, 22, 0, 120);
-    beamGrad.addColorStop(0, 'rgba(145, 250, 255, 0.98)');
-    beamGrad.addColorStop(0.28, 'rgba(255, 248, 130, 0.94)');
-    beamGrad.addColorStop(0.55, 'rgba(255, 140, 200, 0.82)');
-    beamGrad.addColorStop(0.78, 'rgba(160, 140, 255, 0.62)');
-    beamGrad.addColorStop(1, 'rgba(125, 245, 255, 0)');
+    beamGrad.addColorStop(0, 'rgba(130, 252, 255, 0.98)');
+    beamGrad.addColorStop(0.28, 'rgba(255, 245, 95, 0.96)');
+    beamGrad.addColorStop(0.56, 'rgba(255, 112, 190, 0.88)');
+    beamGrad.addColorStop(0.8, 'rgba(145, 125, 255, 0.68)');
+    beamGrad.addColorStop(1, 'rgba(115, 245, 255, 0)');
     g.fillStyle = beamGrad;
     g.beginPath();
     g.moveTo(-22, 22);
@@ -124,58 +120,58 @@ function drawUfo(g: CanvasRenderingContext2D, x: number, y: number, s = 1, beam 
     g.fill();
   }
 
-  g.fillStyle = '#dff8ff';
-  g.strokeStyle = '#6ec8ea';
+  g.fillStyle = '#dcf8ff';
+  g.strokeStyle = '#52c0ec';
   g.lineWidth = 4;
   g.beginPath();
   g.ellipse(0, 2, 34, 30, 0, Math.PI, Math.PI * 2);
   g.fill();
   g.stroke();
 
-  g.fillStyle = '#7be081';
+  g.fillStyle = '#5de06a';
   g.beginPath();
   g.ellipse(0, -4, 13, 15, 0, 0, Math.PI * 2);
   g.fill();
-  g.fillStyle = '#1e2a22';
+  g.fillStyle = '#18241c';
   for (const sx of [-1, 1]) {
     g.beginPath();
     g.ellipse(sx * 4.6, -6, 2.6, 4, 0, 0, Math.PI * 2);
     g.fill();
   }
-  g.strokeStyle = '#7be081';
+  g.strokeStyle = '#5de06a';
   g.lineWidth = 2.4;
   for (const sx of [-1, 1]) {
     g.beginPath();
     g.moveTo(sx * 6, -17);
     g.lineTo(sx * 10, -25);
     g.stroke();
-    g.fillStyle = '#ffd21e';
+    g.fillStyle = '#ffd214';
     g.beginPath();
-    g.arc(sx * 10, -26, 2.6, 0, Math.PI * 2);
+    g.arc(sx * 10, -26, 2.8, 0, Math.PI * 2);
     g.fill();
   }
 
-  g.fillStyle = '#a372ff';
-  g.strokeStyle = '#6538cc';
+  g.fillStyle = '#9b60ff';
+  g.strokeStyle = '#5828c4';
   g.lineWidth = 5;
   g.beginPath();
   g.ellipse(0, 16, 62, 19, 0, 0, Math.PI * 2);
   g.fill();
   g.stroke();
-  g.fillStyle = '#c8a5ff';
+  g.fillStyle = '#c49aff';
   g.beginPath();
   g.ellipse(0, 10, 46, 10, 0, 0, Math.PI * 2);
   g.fill();
-  g.fillStyle = '#8252eb';
+  g.fillStyle = '#763ee8';
   g.beginPath();
   g.ellipse(0, 25, 36, 8, 0, 0, Math.PI * 2);
   g.fill();
 
-  const lights = ['#ffd21e', '#ff7fb2', '#7bf4ff', '#ffd21e', '#9bffb5'];
+  const lights = ['#ffd214', '#ff5ea6', '#5cf2ff', '#ffd214', '#72ff9e'];
   lights.forEach((col, i) => {
     g.fillStyle = col;
     g.beginPath();
-    g.arc(-36 + i * 18, 27, 4.2, 0, Math.PI * 2);
+    g.arc(-36 + i * 18, 27, 4.4, 0, Math.PI * 2);
     g.fill();
   });
 
@@ -188,8 +184,19 @@ function drawCat(g: CanvasRenderingContext2D, x: number, y: number, s = 1, pinkC
   g.scale(s, s);
   g.lineJoin = 'round';
 
-  const coat = pinkCoat ? '#ff99c2' : '#fffdfd';
-  const stroke = pinkCoat ? '#d9458c' : '#e592b6';
+  const coat = pinkCoat ? '#ff8ec2' : '#fffdfd';
+  const stroke = pinkCoat ? '#d63082' : '#e47aae';
+
+  // White die-cut sticker halo
+  g.save();
+  g.shadowColor = 'rgba(60, 18, 48, 0.25)';
+  g.shadowBlur = 10;
+  g.shadowOffsetY = 4;
+  g.fillStyle = '#ffffff';
+  g.beginPath();
+  g.ellipse(0, 0, 52, 46, 0, 0, Math.PI * 2);
+  g.fill();
+  g.restore();
 
   g.fillStyle = coat;
   g.strokeStyle = stroke;
@@ -197,17 +204,17 @@ function drawCat(g: CanvasRenderingContext2D, x: number, y: number, s = 1, pinkC
   for (const sx of [-1, 1]) {
     g.beginPath();
     g.moveTo(sx * 36, -18);
-    g.lineTo(sx * 28, -58);
-    g.lineTo(sx * 6, -35);
+    g.lineTo(sx * 28, -56);
+    g.lineTo(sx * 6, -34);
     g.closePath();
     g.fill();
     g.stroke();
   }
-  g.fillStyle = pinkCoat ? '#ffd4e6' : '#ffb8d0';
+  g.fillStyle = pinkCoat ? '#ffd0e6' : '#ffb0cc';
   for (const sx of [-1, 1]) {
     g.beginPath();
     g.moveTo(sx * 30, -24);
-    g.lineTo(sx * 25, -47);
+    g.lineTo(sx * 25, -46);
     g.lineTo(sx * 13, -34);
     g.closePath();
     g.fill();
@@ -221,39 +228,35 @@ function drawCat(g: CanvasRenderingContext2D, x: number, y: number, s = 1, pinkC
   g.fill();
   g.stroke();
 
-  g.fillStyle = 'rgba(255, 130, 175, 0.55)';
+  g.fillStyle = 'rgba(255, 108, 166, 0.62)';
   for (const sx of [-1, 1]) {
     g.beginPath();
-    g.ellipse(sx * 28, 9, 8.5, 5, 0, 0, Math.PI * 2);
+    g.ellipse(sx * 28, 9, 8.8, 5.2, 0, 0, Math.PI * 2);
     g.fill();
   }
 
-  g.fillStyle = '#231a22';
+  g.fillStyle = '#201620';
   for (const sx of [-1, 1]) {
     g.beginPath();
-    g.ellipse(sx * 15, -4, 4.5, 6.4, 0, 0, Math.PI * 2);
+    g.ellipse(sx * 15, -4, 4.6, 6.4, 0, 0, Math.PI * 2);
     g.fill();
   }
   g.fillStyle = '#ffffff';
   for (const sx of [-1, 1]) {
     g.beginPath();
-    g.arc(sx * 15 - 1.5, -6, 1.8, 0, Math.PI * 2);
+    g.arc(sx * 15 - 1.5, -6, 1.9, 0, Math.PI * 2);
     g.fill();
   }
-  // soft white muzzle oval around the nose / mouth
+
   const muzzle = g.createRadialGradient(0, 12, 2, 0, 12, 18);
   muzzle.addColorStop(0, '#ffffff');
-  muzzle.addColorStop(1, pinkCoat ? '#ffeaf3' : '#fff6fa');
+  muzzle.addColorStop(1, pinkCoat ? '#ffe8f2' : '#fff5fa');
   g.fillStyle = muzzle;
   g.beginPath();
   g.ellipse(0, 12, 17, 11, 0, 0, Math.PI * 2);
   g.fill();
-  g.strokeStyle = pinkCoat ? 'rgba(217, 69, 140, 0.28)' : 'rgba(229, 146, 182, 0.35)';
-  g.lineWidth = 1.4;
-  g.stroke();
 
-  // two tiny whiskers per cheek
-  g.strokeStyle = pinkCoat ? 'rgba(255, 255, 255, 0.96)' : 'rgba(190, 110, 145, 0.6)';
+  g.strokeStyle = pinkCoat ? 'rgba(255, 255, 255, 0.96)' : 'rgba(180, 95, 138, 0.65)';
   g.lineWidth = 2.2;
   g.lineCap = 'round';
   for (const sx of [-1, 1]) {
@@ -267,7 +270,7 @@ function drawCat(g: CanvasRenderingContext2D, x: number, y: number, s = 1, pinkC
     g.stroke();
   }
 
-  g.fillStyle = '#ee6f9e';
+  g.fillStyle = '#ee508e';
   g.beginPath();
   g.moveTo(0, 9);
   g.lineTo(-5, 3);
@@ -275,7 +278,7 @@ function drawCat(g: CanvasRenderingContext2D, x: number, y: number, s = 1, pinkC
   g.closePath();
   g.fill();
 
-  g.strokeStyle = '#6c384b';
+  g.strokeStyle = '#602c40';
   g.lineWidth = 2.6;
   g.beginPath();
   g.arc(-5, 11, 5.5, 0.05 * Math.PI, 0.95 * Math.PI);
@@ -301,7 +304,6 @@ function drawSparkle(g: CanvasRenderingContext2D, x: number, y: number, r: numbe
   g.restore();
 }
 
-/** round kawaii face sticker used on the blue header band */
 function drawKawaiiFace(
   g: CanvasRenderingContext2D,
   x: number,
@@ -312,8 +314,8 @@ function drawKawaiiFace(
 ) {
   g.save();
   g.translate(x, y);
-  g.shadowColor = 'rgba(18, 28, 66, 0.32)';
-  g.shadowBlur = r * 0.32;
+  g.shadowColor = 'rgba(10, 22, 60, 0.36)';
+  g.shadowBlur = r * 0.34;
   g.shadowOffsetY = r * 0.12;
   g.fillStyle = '#fffdfd';
   g.beginPath();
@@ -323,299 +325,273 @@ function drawKawaiiFace(
 
   g.fillStyle = fill;
   g.strokeStyle = rim;
-  g.lineWidth = Math.max(2.4, r * 0.1);
+  g.lineWidth = Math.max(2.6, r * 0.11);
   g.beginPath();
-  g.arc(0, 0, r * 0.82, 0, Math.PI * 2);
+  g.arc(0, 0, r * 0.83, 0, Math.PI * 2);
   g.fill();
   g.stroke();
 
-  g.fillStyle = 'rgba(255, 255, 255, 0.45)';
+  g.fillStyle = 'rgba(255, 255, 255, 0.5)';
   for (const sx of [-1, 1]) {
     g.beginPath();
     g.ellipse(sx * r * 0.47, r * 0.16, r * 0.15, r * 0.09, 0, 0, Math.PI * 2);
     g.fill();
   }
 
-  g.fillStyle = '#20182a';
+  g.fillStyle = '#1b1426';
   for (const sx of [-1, 1]) {
     g.beginPath();
-    g.ellipse(sx * r * 0.3, -r * 0.08, r * 0.085, r * 0.13, 0, 0, Math.PI * 2);
+    g.ellipse(sx * r * 0.3, -r * 0.08, r * 0.09, r * 0.135, 0, 0, Math.PI * 2);
     g.fill();
   }
-  g.strokeStyle = '#20182a';
-  g.lineWidth = Math.max(2, r * 0.075);
+  g.strokeStyle = '#1b1426';
+  g.lineWidth = Math.max(2.2, r * 0.08);
   g.lineCap = 'round';
   g.beginPath();
-  g.arc(0, r * 0.12, r * 0.26, 0.18 * Math.PI, 0.82 * Math.PI);
+  g.arc(0, r * 0.12, r * 0.27, 0.18 * Math.PI, 0.82 * Math.PI);
   g.stroke();
   g.restore();
 }
 
-/** tiny green/red burger mascot sticker in the header cluster */
 function drawTinyBurger(g: CanvasRenderingContext2D, x: number, y: number, r: number) {
   g.save();
   g.translate(x, y);
   g.rotate(-0.09);
-  g.shadowColor = 'rgba(18, 28, 66, 0.28)';
+  g.shadowColor = 'rgba(10, 22, 60, 0.32)';
   g.shadowBlur = r * 0.3;
   g.shadowOffsetY = r * 0.1;
   g.fillStyle = '#fffdfd';
-  roundRect(g, -r * 1.2, -r * 1.0, r * 2.4, r * 2.0, r * 0.34);
+  roundRect(g, -r * 1.2, -r * 1.0, r * 2.4, r * 2.0, r * 0.36);
   g.fill();
   g.shadowColor = 'transparent';
 
-  g.fillStyle = '#6bd47c';
+  g.fillStyle = '#4ad664';
   g.beginPath();
   g.ellipse(0, -r * 0.22, r * 0.96, r * 0.64, 0, Math.PI, 0);
   g.fill();
-  g.fillStyle = '#ffd6a0';
+  g.fillStyle = '#ffd296';
   g.fillRect(-r * 0.96, -r * 0.08, r * 1.92, r * 0.22);
-  g.fillStyle = '#ef4b4b';
+  g.fillStyle = '#f03434';
   roundRect(g, -r * 0.88, r * 0.12, r * 1.76, r * 0.38, r * 0.16);
   g.fill();
-  g.fillStyle = '#ffd228';
+  g.fillStyle = '#ffd01c';
   roundRect(g, -r * 0.9, r * 0.48, r * 1.8, r * 0.24, r * 0.08);
   g.fill();
-
-  g.fillStyle = '#fff8dc';
-  for (const [sx, sy] of [
-    [-0.36, -0.5],
-    [0.02, -0.62],
-    [0.4, -0.46],
-  ]) {
-    g.beginPath();
-    g.ellipse(sx * r, sy * r, r * 0.07, r * 0.045, 0, 0, Math.PI * 2);
-    g.fill();
-  }
   g.restore();
 }
 
 /* ------------------------------------------------------------------ */
-/* printed panels (matching reference layout)                          */
+/* printed panels (matching reference/target.png vibrancy & layout)    */
 /* ------------------------------------------------------------------ */
 
 export function marqueeTexture() {
   return printedTexture(1280, 384, (g) => {
-    const bg = g.createLinearGradient(0, 0, 1280, 384);
-    bg.addColorStop(0, '#bfe8fb');
-    bg.addColorStop(0.16, '#e6f8ff');
-    bg.addColorStop(0.4, '#fff3fa');
-    bg.addColorStop(0.68, '#ffe8f6');
-    bg.addColorStop(1, '#d7f2ff');
+    // Rich glowing neon sky-cyan backlit marquee matching reference/target.png!
+    const bg = g.createLinearGradient(0, 0, 1280, 0);
+    bg.addColorStop(0, '#f29ad0');
+    bg.addColorStop(0.05, '#7de4ff');
+    bg.addColorStop(0.24, '#9df0ff');
+    bg.addColorStop(0.5, '#c6f8ff');
+    bg.addColorStop(0.76, '#9df0ff');
+    bg.addColorStop(0.95, '#7de4ff');
+    bg.addColorStop(1, '#f29ad0');
     g.fillStyle = bg;
     g.fillRect(0, 0, 1280, 384);
 
-    // clean warm pastel-pink-white inner panel with cyan-white neon edges
-    const inner = g.createRadialGradient(640, 180, 40, 640, 192, 660);
-    inner.addColorStop(0, '#fff6fc');
-    inner.addColorStop(0.5, '#ffeaf7');
-    inner.addColorStop(0.82, '#e4f7ff');
-    inner.addColorStop(1, '#c2ecfc');
+    const inner = g.createRadialGradient(640, 192, 40, 640, 192, 620);
+    inner.addColorStop(0, '#dffbff');
+    inner.addColorStop(0.45, '#aaf2ff');
+    inner.addColorStop(0.84, '#7de4ff');
+    inner.addColorStop(1, '#66d8ff');
     g.fillStyle = inner;
-    roundRect(g, 22, 22, 1236, 340, 28);
+    roundRect(g, 18, 18, 1244, 348, 30);
     g.fill();
 
-    // soft magenta glow towards both side ears
+    // Soft magenta-pink inner ambient bleed at left/right bezel edges
     const sideGlow = g.createLinearGradient(0, 0, 1280, 0);
-    sideGlow.addColorStop(0, 'rgba(244, 120, 190, 0.5)');
-    sideGlow.addColorStop(0.22, 'rgba(255, 200, 235, 0.14)');
+    sideGlow.addColorStop(0, 'rgba(246, 118, 192, 0.48)');
+    sideGlow.addColorStop(0.14, 'rgba(255, 190, 232, 0.14)');
     sideGlow.addColorStop(0.5, 'rgba(255,255,255,0)');
-    sideGlow.addColorStop(0.78, 'rgba(255, 200, 235, 0.14)');
-    sideGlow.addColorStop(1, 'rgba(244, 120, 190, 0.5)');
+    sideGlow.addColorStop(0.86, 'rgba(255, 190, 232, 0.14)');
+    sideGlow.addColorStop(1, 'rgba(246, 118, 192, 0.48)');
     g.fillStyle = sideGlow;
     g.fillRect(0, 0, 1280, 384);
 
-    const hot = g.createRadialGradient(640, 192, 30, 640, 192, 520);
-    hot.addColorStop(0, 'rgba(255,255,255,0.6)');
-    hot.addColorStop(0.55, 'rgba(255,255,255,0.12)');
-    hot.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = hot;
-    g.fillRect(0, 0, 1280, 384);
-
-    // thick cyan neon tube border (wide outer glow + white-hot core)
+    // Glowing cyan/white neon tube border
     g.save();
-    g.shadowColor = 'rgba(96, 232, 255, 1)';
-    g.shadowBlur = 44;
-    g.strokeStyle = '#7fe6ff';
+    g.shadowColor = 'rgba(72, 224, 255, 1)';
+    g.shadowBlur = 42;
+    g.strokeStyle = '#6ce2ff';
     g.lineWidth = 22;
-    roundRect(g, 20, 20, 1240, 344, 28);
+    roundRect(g, 22, 22, 1236, 340, 28);
     g.stroke();
-    g.shadowBlur = 24;
-    g.strokeStyle = '#c8f9ff';
-    g.lineWidth = 14;
-    roundRect(g, 20, 20, 1240, 344, 28);
+    g.shadowBlur = 20;
+    g.strokeStyle = '#cffbff';
+    g.lineWidth = 12;
+    roundRect(g, 22, 22, 1236, 340, 28);
     g.stroke();
-    g.shadowBlur = 10;
-    g.strokeStyle = 'rgba(255,255,255,0.99)';
-    g.lineWidth = 6;
-    roundRect(g, 20, 20, 1240, 344, 28);
+    g.shadowBlur = 8;
+    g.strokeStyle = '#ffffff';
+    g.lineWidth = 5;
+    roundRect(g, 22, 22, 1236, 340, 28);
     g.stroke();
     g.restore();
 
-    g.strokeStyle = 'rgba(255,255,255,0.35)';
-    g.lineWidth = 2;
-    roundRect(g, 34, 34, 1212, 316, 22);
-    g.stroke();
+    drawSparkle(g, 66, 326, 14, 'rgba(255,255,255,0.92)');
+    drawSparkle(g, 1216, 324, 15, 'rgba(255,255,255,0.92)');
+    drawSparkle(g, 310, 52, 12, 'rgba(255,255,255,0.85)');
+    drawSparkle(g, 945, 56, 12, 'rgba(255,255,255,0.85)');
 
-    drawSparkle(g, 68, 330, 14, 'rgba(255,255,255,0.9)');
-    drawSparkle(g, 1214, 326, 15, 'rgba(255,255,255,0.9)');
-    drawSparkle(g, 300, 52, 12, 'rgba(255,255,255,0.8)');
-    drawSparkle(g, 950, 56, 12, 'rgba(255,255,255,0.8)');
-
+    // Bold chunky UFO PORTFOLIO headline with explosive hot-pink outline
     const headline = 'UFO PORTFOLIO';
-    const size = fitFont(g, headline, 1010, 132, 900, ROUND);
+    const size = fitFont(g, headline, 1040, 144, 900, ROUND);
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.lineJoin = 'round';
     g.font = `900 ${size}px ${ROUND}`;
 
-    // soft magenta halo
     g.save();
-    g.shadowColor = 'rgba(232, 51, 143, 0.9)';
-    g.shadowBlur = 40;
-    g.fillStyle = 'rgba(255, 100, 180, 0.75)';
-    g.fillText(headline, 640, 201);
+    g.shadowColor = 'rgba(240, 37, 142, 0.92)';
+    g.shadowBlur = 44;
+    g.fillStyle = 'rgba(255, 72, 168, 0.85)';
+    g.fillText(headline, 640, 198);
     g.restore();
 
-    // thick magenta + hot pink outline with a pale inner line
-    g.strokeStyle = '#e8338f';
-    g.lineWidth = 42;
-    g.strokeText(headline, 640, 201);
-    g.strokeStyle = '#ff63a8';
-    g.lineWidth = 27;
-    g.strokeText(headline, 640, 201);
-    g.strokeStyle = '#ffd7ec';
-    g.lineWidth = 9;
-    g.strokeText(headline, 640, 201);
+    g.strokeStyle = '#e81c88';
+    g.lineWidth = 46;
+    g.strokeText(headline, 640, 198);
+    g.strokeStyle = '#ff54a8';
+    g.lineWidth = 28;
+    g.strokeText(headline, 640, 198);
+    g.strokeStyle = '#ffd2ea';
+    g.lineWidth = 8;
+    g.strokeText(headline, 640, 198);
     g.fillStyle = '#ffffff';
-    g.fillText(headline, 640, 201);
+    g.fillText(headline, 640, 198);
 
-    // top-left purple UFO saucer with green alien
-    drawUfo(g, 112, 66, 0.82, false);
+    // Top-left purple UFO saucer with green alien
+    drawUfo(g, 92, 62, 0.86, false);
 
-    // bottom-left green/pink kana pill
+    // Bottom-left tilted green/pink kana pill (tilted clockwise down-right like reference!)
     g.save();
-    g.translate(176, 318);
-    g.rotate(-0.09);
-    g.shadowColor = 'rgba(80, 18, 52, 0.3)';
+    g.translate(148, 318);
+    g.rotate(0.14);
+    g.shadowColor = 'rgba(72, 14, 48, 0.34)';
     g.shadowBlur = 10;
     g.shadowOffsetY = 5;
-    g.fillStyle = '#ff8fc4';
-    roundRect(g, -124, -28, 248, 56, 28);
+    g.fillStyle = '#ff72b8';
+    roundRect(g, -116, -26, 232, 52, 26);
     g.fill();
     g.shadowColor = 'transparent';
-    g.strokeStyle = '#43c46e';
+    g.strokeStyle = '#38c864';
     g.lineWidth = 9;
-    roundRect(g, -124, -28, 248, 56, 28);
+    roundRect(g, -116, -26, 232, 52, 26);
     g.stroke();
     g.strokeStyle = '#ffffff';
-    g.lineWidth = 4;
-    roundRect(g, -115, -19, 230, 38, 19);
+    g.lineWidth = 3.5;
+    roundRect(g, -108, -18, 216, 36, 18);
     g.stroke();
     g.fillStyle = '#ffffff';
-    g.font = `900 30px ${JP}`;
+    g.font = `900 28px ${JP}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText('たんけんちゅう', 0, 2);
+    g.fillText('がんばろう', 0, 2);
     g.restore();
 
-    // bottom-right pink kitty head
-    drawCat(g, 1146, 304, 0.92, true);
-
-    return;
+    // Bottom-right cute kawaii pink/white kitty head
+    drawCat(g, 1152, 300, 0.96, false);
   });
 }
 
 export function headerTexture() {
   return printedTexture(1600, 200, (g) => {
+    // Rich deep royal cobalt-blue gradient matching reference/target.png!
     const bg = g.createLinearGradient(0, 0, 0, 200);
-    bg.addColorStop(0, '#135ca3');
-    bg.addColorStop(0.45, '#1f79bd');
-    bg.addColorStop(1, '#2b8dca');
+    bg.addColorStop(0, '#0a4a9e');
+    bg.addColorStop(0.45, '#1163bd');
+    bg.addColorStop(1, '#197ad6');
     g.fillStyle = bg;
     g.fillRect(0, 0, 1600, 200);
 
-    g.save();
-    g.globalAlpha = 0.09;
-    g.fillStyle = '#ffffff';
-    for (let i = -200; i < 1600; i += 88) {
-      g.beginPath();
-      g.moveTo(i, 0);
-      g.lineTo(i + 36, 0);
-      g.lineTo(i - 100, 200);
-      g.lineTo(i - 136, 200);
-      g.fill();
-    }
-    g.restore();
-
-    // glossy top + shadow bottom edges of the blue band
-    const sheen = g.createLinearGradient(0, 0, 0, 60);
-    sheen.addColorStop(0, 'rgba(255,255,255,0.18)');
+    // Clean glossy top highlight + deep navy bottom rim
+    const sheen = g.createLinearGradient(0, 0, 0, 68);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.22)');
     sheen.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = sheen;
-    g.fillRect(0, 0, 1600, 62);
-    g.fillStyle = 'rgba(216,243,255,0.55)';
-    g.fillRect(0, 0, 1600, 5);
-    g.fillStyle = '#1a4f86';
+    g.fillRect(0, 0, 1600, 68);
+    g.fillStyle = 'rgba(180,236,255,0.52)';
+    g.fillRect(0, 0, 1600, 4);
+    g.fillStyle = '#093878';
     g.fillRect(0, 192, 1600, 8);
 
-    // left cluster: blue face, pink face, tiny burger mascot
-    drawKawaiiFace(g, 100, 106, 42, '#8fd4ff', '#2c69b6');
-    drawKawaiiFace(g, 182, 72, 34, '#ff9fcb', '#b83a76');
-    drawTinyBurger(g, 191, 144, 26);
+    // Left mascot cluster: blue face, pink face, tiny burger
+    drawKawaiiFace(g, 108, 104, 44, '#70ccff', '#1e58b0');
+    drawKawaiiFace(g, 194, 72, 35, '#ff88c0', '#b82872');
+    drawTinyBurger(g, 204, 146, 26);
 
-    // centre katakana with dark-blue + white double outline
+    // Explosive hot-pink katakana with crisp white + deep navy outline
     const word = 'クレーンゲーム';
-    const size = fitFont(g, word, 900, 134, 900);
+    const size = fitFont(g, word, 920, 140, 900);
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.lineJoin = 'round';
     g.font = `900 ${size}px ${JP}`;
 
-    g.fillStyle = 'rgba(8, 28, 70, 0.5)';
-    g.fillText(word, 806, 110);
-    g.strokeStyle = '#123772';
-    g.lineWidth = 30;
-    g.strokeText(word, 800, 102);
+    g.fillStyle = 'rgba(5, 18, 56, 0.56)';
+    g.fillText(word, 806, 112);
+    g.strokeStyle = '#0c2c68';
+    g.lineWidth = 32;
+    g.strokeText(word, 800, 103);
     g.strokeStyle = '#ffffff';
     g.lineWidth = 17;
-    g.strokeText(word, 800, 102);
-    g.fillStyle = '#e8338f';
-    g.fillText(word, 800, 102);
+    g.strokeText(word, 800, 103);
+    g.fillStyle = '#f0248e';
+    g.fillText(word, 800, 103);
 
-    // right tilted yellow/black WARNING sticker (3 subtext lines)
+    // Right yellow/black WARNING sticker tilted clockwise like reference!
     g.save();
-    g.translate(1424, 98);
-    g.rotate(-0.08);
-    g.shadowColor = 'rgba(10, 25, 70, 0.38)';
-    g.shadowBlur = 9;
-    g.shadowOffsetY = 4;
-    g.fillStyle = '#ffd228';
-    roundRect(g, -126, -58, 252, 116, 8);
+    g.translate(1426, 100);
+    g.rotate(0.085);
+    g.shadowColor = 'rgba(6, 18, 56, 0.45)';
+    g.shadowBlur = 10;
+    g.shadowOffsetY = 5;
+    g.fillStyle = '#ffd21e';
+    roundRect(g, -128, -58, 256, 116, 8);
     g.fill();
     g.shadowColor = 'transparent';
-    g.strokeStyle = '#1a1620';
-    g.lineWidth = 6;
-    roundRect(g, -122, -54, 244, 108, 6);
+    g.strokeStyle = '#14151a';
+    g.lineWidth = 7;
+    roundRect(g, -123, -53, 246, 106, 6);
     g.stroke();
-    g.fillStyle = '#1a1620';
-    g.textAlign = 'left';
-    g.font = `900 31px ${ROUND}`;
-    g.fillText('WARNING', -62, -20);
-    g.font = `700 11.5px ${ROUND}`;
-    g.fillText('CAUTION: MOVING PARTS', -100, 10);
-    g.fillText('KEEP HANDS CLEAR', -100, 27);
-    g.fillText('INSERT COIN TO PLAY', -100, 44);
+
+    // Top black header bar inside WARNING sticker matching reference
+    g.fillStyle = '#14151a';
+    roundRect(g, -114, -44, 228, 38, 4);
+    g.fill();
+
+    g.fillStyle = '#ffd21e';
     g.beginPath();
-    g.moveTo(-90, -36);
-    g.lineTo(-74, -8);
-    g.lineTo(-106, -8);
+    g.moveTo(-88, -38);
+    g.lineTo(-74, -12);
+    g.lineTo(-102, -12);
     g.closePath();
     g.fill();
-    g.fillStyle = '#ffd228';
-    g.font = `900 19px ${ROUND}`;
+    g.fillStyle = '#14151a';
+    g.font = `900 18px ${ROUND}`;
     g.textAlign = 'center';
-    g.fillText('!', -90, -14);
+    g.fillText('!', -88, -19);
+
+    g.fillStyle = '#ffd21e';
+    g.textAlign = 'left';
+    g.font = `900 30px ${ROUND}`;
+    g.fillText('WARNING', -62, -24);
+
+    g.fillStyle = '#14151a';
+    g.textAlign = 'center';
+    g.font = `800 12px ${ROUND}`;
+    g.fillText('CAUTION: MOVING PARTS', 0, 12);
+    g.fillText('KEEP HANDS CLEAR', 0, 28);
+    g.fillText('PRESS PLAY TO START', 0, 44);
     g.restore();
   });
 }
@@ -624,26 +600,27 @@ export function bodyTexture() {
   return printedTexture(1024, 512, (g) => {
     const bg = g.createLinearGradient(0, 0, 0, 512);
     bg.addColorStop(0, '#ffffff');
-    bg.addColorStop(0.72, '#fcf9fb');
-    bg.addColorStop(1, '#f3f4f7');
+    bg.addColorStop(0.75, '#fcf9fc');
+    bg.addColorStop(1, '#f2f3f8');
     g.fillStyle = bg;
-    roundRect(g, 4, 4, 1016, 504, 24);
+    roundRect(g, 2, 2, 1020, 508, 22);
     g.fill();
 
-    g.strokeStyle = 'rgba(229, 109, 166, 0.35)';
+    // Soft pink inner trim (clean, no harsh black outline)
+    g.strokeStyle = 'rgba(232, 110, 174, 0.35)';
     g.lineWidth = 4;
-    roundRect(g, 10, 10, 1004, 492, 20);
+    roundRect(g, 8, 8, 1008, 496, 18);
     g.stroke();
 
-    // Bottom-left: striped cyan/yellow sun disc, purple UFO + rainbow beam
+    // Bottom-left: striped electric cyan/yellow sun disc + purple UFO + rainbow beam
     g.save();
-    const sunX = 116;
-    const sunY = 340;
-    const sunR = 104;
-    g.shadowColor = 'rgba(80, 30, 70, 0.18)';
+    const sunX = 114;
+    const sunY = 306;
+    const sunR = 90;
+    g.shadowColor = 'rgba(72, 24, 68, 0.2)';
     g.shadowBlur = 14;
     g.shadowOffsetY = 5;
-    g.fillStyle = '#fffdfd';
+    g.fillStyle = '#ffffff';
     g.beginPath();
     g.arc(sunX, sunY, sunR + 9, 0, Math.PI * 2);
     g.fill();
@@ -651,232 +628,271 @@ export function bodyTexture() {
     for (let i = 0; i < 24; i++) {
       const a0 = (i / 24) * Math.PI * 2;
       const a1 = ((i + 1) / 24) * Math.PI * 2;
-      g.fillStyle = i % 2 === 0 ? '#73d4ff' : '#ffd228';
+      g.fillStyle = i % 2 === 0 ? '#3ec4ff' : '#ffd21c';
       g.beginPath();
       g.moveTo(sunX, sunY);
       g.arc(sunX, sunY, sunR, a0, a1);
       g.closePath();
       g.fill();
     }
-    g.fillStyle = '#bdeeff';
+    g.fillStyle = '#9be8ff';
     g.beginPath();
     g.arc(sunX, sunY, sunR * 0.62, 0, Math.PI * 2);
     g.fill();
     g.strokeStyle = '#ffffff';
     g.lineWidth = 6;
     g.stroke();
-    drawUfo(g, sunX, sunY - 22, 1.04, true);
+    drawUfo(g, sunX, sunY - 20, 0.98, true);
     g.restore();
 
-    // small pink flower sticker in a white square
+    // Small pink sakura blossom sticker in a white rounded square
     g.save();
-    g.translate(252, 220);
-    g.rotate(-0.06);
-    g.shadowColor = 'rgba(80, 25, 60, 0.18)';
-    g.shadowBlur = 11;
-    g.shadowOffsetY = 5;
+    g.translate(248, 224);
+    g.scale(0.86, 0.86);
+    g.rotate(-0.05);
+    g.shadowColor = 'rgba(72, 20, 56, 0.2)';
+    g.shadowBlur = 10;
+    g.shadowOffsetY = 4;
     g.fillStyle = '#ffffff';
-    g.strokeStyle = '#e46aa6';
+    g.strokeStyle = '#e868aa';
     g.lineWidth = 5;
-    roundRect(g, -52, -43, 104, 86, 20);
+    roundRect(g, -48, -40, 96, 80, 18);
     g.fill();
     g.stroke();
     g.shadowColor = 'transparent';
-    g.fillStyle = '#ff9fcf';
+    g.fillStyle = '#ff88c4';
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2;
       g.beginPath();
-      g.ellipse(Math.cos(a) * 19, Math.sin(a) * 19, 14, 10, a, 0, Math.PI * 2);
+      g.ellipse(Math.cos(a) * 18, Math.sin(a) * 18, 13, 9.5, a, 0, Math.PI * 2);
       g.fill();
     }
-    g.fillStyle = '#ffe36b';
+    g.fillStyle = '#ffd838';
     g.beginPath();
-    g.arc(0, 0, 11, 0, Math.PI * 2);
+    g.arc(0, 0, 10, 0, Math.PI * 2);
     g.fill();
     g.restore();
 
-    // bold 2-line katakana with white + blue double outline
+    // Bold 2-line katakana with vivid hot-pink fill + white & blue outline
     g.textAlign = 'left';
     g.textBaseline = 'middle';
     g.lineJoin = 'round';
     const lines = ['クレーンゲーム', 'ポートフォリオ'];
     lines.forEach((word, i) => {
-      const size = i === 0 ? 70 : 64;
+      const size = i === 0 ? 72 : 66;
       g.font = `900 ${size}px ${JP}`;
-      const y = 334 + i * 86;
-      const x = 196;
-      g.fillStyle = 'rgba(53, 148, 232, 0.4)';
+      const y = 326 + i * 78;
+      const x = 166;
+      g.fillStyle = 'rgba(20, 96, 200, 0.42)';
       g.fillText(word, x + 5, y + 7);
-      g.strokeStyle = '#2268b8';
-      g.lineWidth = 20;
+      g.strokeStyle = '#1862c4';
+      g.lineWidth = 22;
       g.strokeText(word, x, y);
       g.strokeStyle = '#ffffff';
       g.lineWidth = 12;
       g.strokeText(word, x, y);
-      g.fillStyle = '#e8338f';
+      g.fillStyle = '#f0248e';
       g.fillText(word, x, y);
     });
 
-    // Bottom-right cluster: pink cat, yellow/blue UFO round seal, red/white WARNING
-    drawCat(g, 742, 304, 0.96, true);
+    // Bottom-right cluster: cute pink cat, yellow/blue UFO round seal, red/white WARNING
+    drawCat(g, 732, 336, 0.86, true);
 
     g.save();
-    g.translate(904, 240);
-    g.shadowColor = 'rgba(40, 30, 70, 0.2)';
+    g.translate(894, 256);
+    g.shadowColor = 'rgba(35, 22, 70, 0.24)';
     g.shadowBlur = 12;
     g.shadowOffsetY = 5;
-    g.fillStyle = '#ffd228';
+    g.fillStyle = '#ffd21c';
     g.beginPath();
-    g.arc(0, 0, 72, 0, Math.PI * 2);
+    g.arc(0, 0, 58, 0, Math.PI * 2);
     g.fill();
     g.shadowColor = 'transparent';
-    g.strokeStyle = '#ffffff';
-    g.lineWidth = 6;
+    g.strokeStyle = '#5c42b8';
+    g.lineWidth = 4.5;
     g.stroke();
-    g.fillStyle = '#5bb8f2';
+    g.fillStyle = '#38a8f4';
     g.beginPath();
-    g.arc(0, 0, 50, 0, Math.PI * 2);
+    g.arc(0, 0, 39, 0, Math.PI * 2);
     g.fill();
-    drawUfo(g, 0, -2, 0.56, false);
-    g.fillStyle = '#3a2266';
-    g.font = `900 14px ${ROUND}`;
+    drawUfo(g, 0, -2, 0.44, false);
+    g.fillStyle = '#2d1a5a';
+    g.font = `900 10.5px ${ROUND}`;
     g.textAlign = 'center';
-    g.fillText('UFO CATCHER', 0, -56);
-    g.fillText('PORTFOLIO', 0, 59);
+    g.fillText('UFO CATCHER', 0, -45);
+    g.fillText('PORTFOLIO', 0, 47);
     g.restore();
 
+    // Tilted red/white WARNING sticker (sloping down-right like reference!)
     g.save();
-    g.translate(868, 440);
-    g.rotate(-0.07);
-    g.shadowColor = 'rgba(40, 10, 20, 0.22)';
+    g.translate(866, 424);
+    g.rotate(0.08);
+    g.shadowColor = 'rgba(40, 10, 20, 0.25)';
     g.shadowBlur = 10;
-    g.shadowOffsetY = 4;
+    g.shadowOffsetY = 5;
     g.fillStyle = '#ffffff';
-    roundRect(g, -126, -56, 252, 112, 11);
+    roundRect(g, -126, -58, 252, 116, 11);
     g.fill();
     g.shadowColor = 'transparent';
-    g.strokeStyle = '#e8262b';
+    g.strokeStyle = '#e81c28';
     g.lineWidth = 7;
-    roundRect(g, -121, -51, 242, 102, 9);
+    roundRect(g, -121, -53, 242, 106, 9);
     g.stroke();
-    g.fillStyle = '#e8262b';
-    roundRect(g, -110, -42, 220, 38, 5);
+    g.fillStyle = '#e81c28';
+    roundRect(g, -110, -44, 220, 40, 5);
     g.fill();
     g.fillStyle = '#ffffff';
-    g.font = `900 23px ${ROUND}`;
+    g.font = `900 24px ${ROUND}`;
     g.textAlign = 'center';
-    g.fillText('▲ WARNING', 0, -19);
-    g.fillStyle = '#2b1e24';
-    g.font = `700 12px ${ROUND}`;
-    g.fillText('DO NOT TILT OR SHAKE', 0, 17);
-    g.fillText('INSERT COIN TO PLAY', 0, 38);
+    g.fillText('▲ WARNING', 0, -21);
+    g.fillStyle = '#22181e';
+    g.font = `800 12.5px ${ROUND}`;
+    g.fillText('DO NOT TILT OR SHAKE', 0, 16);
+    g.fillText('PRESS PLAY TO START', 0, 38);
     g.restore();
   });
 }
 
+/* Deck print layout constants — shared with 3D joystick & button coordinates
+   so arrows, label, and golden glow align to the sub-pixel! */
+const DECK_W = 0.965;
+const DECK_D = 0.365;
+const JOY_X = -0.27;
+const JOY_Z = 0.02;
+const BTN_X = 0.255;
+const BTN_Z = -0.01;
+
 export function deckTexture() {
   return printedTexture(1024, 341, (g) => {
+    // Vivid glossy cerulean/sky-blue deck matching reference/target.png!
     const bg = g.createLinearGradient(0, 0, 0, 341);
-    bg.addColorStop(0, '#8ad4ff');
-    bg.addColorStop(0.45, '#68bff2');
-    bg.addColorStop(1, '#48a3e3');
+    bg.addColorStop(0, '#36b8ff');
+    bg.addColorStop(0.42, '#189ef0');
+    bg.addColorStop(1, '#0d82d4');
     g.fillStyle = bg;
     g.fillRect(0, 0, 1024, 341);
 
-    const sheen = g.createRadialGradient(380, 70, 20, 380, 70, 520);
-    sheen.addColorStop(0, 'rgba(255,255,255,0.32)');
+    const sheen = g.createRadialGradient(340, 62, 20, 340, 62, 540);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.28)');
     sheen.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = sheen;
     g.fillRect(0, 0, 1024, 341);
 
-    g.strokeStyle = 'rgba(255,255,255,0.8)';
-    g.lineWidth = 4;
+    // Exact canvas pixel centers of the 3D joystick & yellow button
+    const jx = ((JOY_X + DECK_W / 2) / DECK_W) * 1024; // 225.5
+    const jy = ((JOY_Z + DECK_D / 2) / DECK_D) * 341; // 189.2
+    const bx = ((BTN_X + DECK_W / 2) / DECK_W) * 1024; // 782.6
+    const by = ((BTN_Z + DECK_D / 2) / DECK_D) * 341; // 161.2
+
+    // Warm golden light halo around the PLAY button bezel (kept tight so PLAY / スタート stays crisp!)
+    const btnHalo = g.createRadialGradient(bx, by, 56, bx, by, 132);
+    btnHalo.addColorStop(0, 'rgba(255, 224, 72, 0.48)');
+    btnHalo.addColorStop(0.55, 'rgba(255, 206, 48, 0.16)');
+    btnHalo.addColorStop(1, 'rgba(255, 206, 48, 0)');
+    g.fillStyle = btnHalo;
+    g.fillRect(bx - 200, 0, 400, 341);
+
+    // Crisp white inner pinstripe border around the blue deck
+    g.strokeStyle = 'rgba(255,255,255,0.92)';
+    g.lineWidth = 5;
     roundRect(g, 14, 14, 996, 313, 22);
     g.stroke();
 
-    // three pink arrows: left, right, down (front of joystick)
+    // Perfectly symmetric hot-pink arrows centered around (jx, jy)!
     const arrow = (x: number, y: number, dir: 'left' | 'right' | 'up' | 'down') => {
       g.save();
       g.translate(x, y);
-      g.scale(1.3, 1.3);
+      g.scale(1.22, 1.22);
       if (dir === 'left') g.rotate(-Math.PI / 2);
       if (dir === 'right') g.rotate(Math.PI / 2);
       if (dir === 'down') g.rotate(Math.PI);
-      g.shadowColor = 'rgba(15, 40, 90, 0.3)';
-      g.shadowBlur = 6;
+      g.shadowColor = 'rgba(8, 32, 82, 0.36)';
+      g.shadowBlur = 7;
       g.shadowOffsetY = 3;
       g.beginPath();
-      g.moveTo(0, -30);
-      g.lineTo(24, -6);
-      g.lineTo(10, -6);
-      g.lineTo(10, 24);
-      g.lineTo(-10, 24);
-      g.lineTo(-10, -6);
-      g.lineTo(-24, -6);
+      g.moveTo(0, -28);
+      g.lineTo(24, -4);
+      g.lineTo(10, -4);
+      g.lineTo(10, 22);
+      g.lineTo(-10, 22);
+      g.lineTo(-10, -4);
+      g.lineTo(-24, -4);
       g.closePath();
       g.strokeStyle = '#ffffff';
-      g.lineWidth = 8;
+      g.lineWidth = 8.5;
       g.lineJoin = 'round';
       g.stroke();
       g.shadowColor = 'transparent';
-      g.fillStyle = '#f04db0';
+      g.fillStyle = '#f62998';
       g.fill();
       g.restore();
     };
 
-    arrow(68, 190, 'left');
-    arrow(316, 190, 'right');
-    arrow(194, 298, 'down');
+    arrow(jx - 118, jy, 'left');
+    arrow(jx + 118, jy, 'right');
+    arrow(jx, jy + 98, 'down');
 
-    // PLAY / スタート directly below the yellow button on the right
-    g.fillStyle = 'rgba(12, 40, 96, 0.45)';
+    // PLAY / スタート centered cleanly directly beneath the yellow button (bx)
+    g.fillStyle = 'rgba(6, 30, 80, 0.45)';
     g.font = `900 32px ${ROUND}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText('PLAY / スタート', 762, 292);
+    g.fillText('PLAY / スタート', bx + 2, 294);
     g.fillStyle = '#ffffff';
-    g.fillText('PLAY / スタート', 760, 289);
+    g.fillText('PLAY / スタート', bx, 291);
 
-    // yellow smiley top-left of the deck
+    // Yellow smiley sticker cleanly in the visible back-left corner of the blue deck
     g.save();
-    g.translate(70, 132);
-    g.rotate(-0.1);
-    g.fillStyle = '#ffd228';
+    g.translate(86, 134);
+    g.rotate(-0.08);
+    g.shadowColor = 'rgba(8, 32, 82, 0.28)';
+    g.shadowBlur = 6;
+    g.shadowOffsetY = 3;
+    g.fillStyle = '#ffd21c';
     g.beginPath();
-    g.arc(0, 0, 24, 0, Math.PI * 2);
+    g.arc(0, 0, 25, 0, Math.PI * 2);
     g.fill();
-    g.strokeStyle = '#ffffff';
-    g.lineWidth = 4;
+    g.shadowColor = 'transparent';
+    g.strokeStyle = '#181620';
+    g.lineWidth = 3.5;
     g.stroke();
-    g.fillStyle = '#1a1620';
+    g.fillStyle = '#181620';
     g.beginPath();
-    g.arc(-9, -5, 3.2, 0, Math.PI * 2);
-    g.arc(9, -5, 3.2, 0, Math.PI * 2);
+    g.arc(-8.5, -5, 3.2, 0, Math.PI * 2);
+    g.arc(8.5, -5, 3.2, 0, Math.PI * 2);
     g.fill();
-    g.strokeStyle = '#1a1620';
+    g.strokeStyle = '#181620';
     g.lineWidth = 3.2;
     g.lineCap = 'round';
     g.beginPath();
-    g.arc(0, 2, 12, 0.15 * Math.PI, 0.85 * Math.PI);
+    g.arc(0, 2, 12, 0.16 * Math.PI, 0.84 * Math.PI);
     g.stroke();
     g.restore();
 
-    // small round purple/pink badge on the top-right of the deck behind the button
+    // Cute round purple/pink kawaii sticker cleanly in the visible back-right corner
     g.save();
-    g.translate(982, 150);
-    g.fillStyle = '#c79bff';
+    g.translate(944, 136);
+    g.shadowColor = 'rgba(8, 32, 82, 0.28)';
+    g.shadowBlur = 6;
+    g.shadowOffsetY = 3;
+    g.fillStyle = '#ffffff';
     g.beginPath();
-    g.arc(0, 0, 22, 0, Math.PI * 2);
+    g.arc(0, 0, 26, 0, Math.PI * 2);
     g.fill();
-    g.strokeStyle = '#ff8fc8';
-    g.lineWidth = 4;
+    g.shadowColor = 'transparent';
+    g.fillStyle = '#b47cff';
+    g.beginPath();
+    g.arc(0, 0, 21, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = '#ff68b4';
+    g.lineWidth = 3.5;
     g.stroke();
-    g.fillStyle = '#3a2266';
+    g.fillStyle = '#2d1854';
     g.beginPath();
     g.arc(-6, -3, 2.6, 0, Math.PI * 2);
     g.arc(6, -3, 2.6, 0, Math.PI * 2);
     g.fill();
-    g.strokeStyle = '#3a2266';
+    g.strokeStyle = '#2d1854';
     g.lineWidth = 2.6;
     g.lineCap = 'round';
     g.beginPath();
@@ -892,38 +908,75 @@ function sideDecalTexture() {
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.lineJoin = 'round';
-    g.font = `900 48px ${JP}`;
+    g.font = `900 50px ${JP}`;
     for (let i = 0; i < chars.length; i++) {
       const y = 52 + i * 58;
-      g.fillStyle = 'rgba(120, 20, 70, 0.35)';
+      g.fillStyle = 'rgba(80, 12, 58, 0.42)';
       g.fillText(chars[i], 67, y + 3);
       g.strokeStyle = '#ffffff';
-      g.lineWidth = 11;
+      g.lineWidth = 12;
       g.strokeText(chars[i], 64, y);
-      g.fillStyle = '#e8338f';
+      g.fillStyle = '#f0248e';
       g.fillText(chars[i], 64, y);
     }
   });
 }
 
-/** purple/white ポートフォリオ pill that sits proud of the marquee bezel */
+/** Colorful peeking rectangular stickers on the left blue pillar outer edge (matching reference). */
+function leftEdgeStickersTexture() {
+  return printedTexture(128, 460, (g) => {
+    // Upper pink/purple peeking ticket sticker
+    g.save();
+    g.translate(16, 118);
+    g.rotate(0.08);
+    g.fillStyle = '#ffffff';
+    roundRect(g, -28, -56, 62, 112, 8);
+    g.fill();
+    g.fillStyle = '#ff68b4';
+    roundRect(g, -22, -50, 50, 100, 5);
+    g.fill();
+    g.fillStyle = '#38c0ff';
+    g.fillRect(-16, -36, 36, 22);
+    g.fillStyle = '#ffd21c';
+    g.fillRect(-16, 0, 36, 32);
+    g.restore();
+
+    // Lower yellow/blue peeking comic sticker
+    g.save();
+    g.translate(14, 304);
+    g.rotate(-0.07);
+    g.fillStyle = '#ffffff';
+    roundRect(g, -28, -44, 62, 88, 8);
+    g.fill();
+    g.fillStyle = '#ffd21c';
+    roundRect(g, -22, -38, 50, 76, 5);
+    g.fill();
+    g.fillStyle = '#1888e8';
+    g.fillRect(-16, -24, 34, 24);
+    g.fillStyle = '#f0248e';
+    g.fillRect(-16, 8, 34, 18);
+    g.restore();
+  });
+}
+
+/** Purple/white ポートフォリオ sticker sitting proud of the top-right marquee bezel. */
 function cornerStickerTexture() {
   return printedTexture(512, 112, (g) => {
     g.save();
     g.translate(256, 56);
-    g.shadowColor = 'rgba(50, 18, 80, 0.3)';
+    g.shadowColor = 'rgba(42, 14, 78, 0.35)';
     g.shadowBlur = 12;
     g.shadowOffsetY = 5;
     g.fillStyle = '#ffffff';
     roundRect(g, -246, -46, 492, 92, 46);
     g.fill();
     g.shadowColor = 'transparent';
-    g.strokeStyle = '#8b63e6';
-    g.lineWidth = 12;
+    g.strokeStyle = '#6c42d8';
+    g.lineWidth = 13;
     roundRect(g, -238, -38, 476, 76, 38);
     g.stroke();
-    g.fillStyle = '#8b63e6';
-    g.font = `900 52px ${JP}`;
+    g.fillStyle = '#6c42d8';
+    g.font = `900 54px ${JP}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText('ポートフォリオ', 0, 2);
@@ -931,161 +984,114 @@ function cornerStickerTexture() {
   });
 }
 
-/** crisp yellow/black WARNING plate mounted on the frame above the button */
+/** Crisp yellow/black WARNING plate mounted on the blue lower sill above the button. */
 function warningPlateTexture() {
   return printedTexture(512, 200, (g) => {
     g.save();
     g.translate(256, 100);
-    g.fillStyle = '#ffd228';
+    g.fillStyle = '#ffd21c';
     roundRect(g, -246, -88, 492, 176, 12);
     g.fill();
-    g.strokeStyle = '#1a1620';
+    g.strokeStyle = '#14151a';
     g.lineWidth = 12;
     roundRect(g, -238, -80, 476, 160, 9);
     g.stroke();
 
-    g.fillStyle = '#1a1620';
+    // Black header bar inside WARNING plate (matches reference!)
+    g.fillStyle = '#14151a';
+    roundRect(g, -222, -66, 444, 62, 6);
+    g.fill();
+
+    g.fillStyle = '#ffd21c';
     g.beginPath();
-    g.moveTo(-164, -62);
-    g.lineTo(-128, 2);
-    g.lineTo(-200, 2);
+    g.moveTo(-162, -56);
+    g.lineTo(-132, -12);
+    g.lineTo(-192, -12);
     g.closePath();
     g.fill();
-    g.fillStyle = '#ffd228';
-    g.font = `900 44px ${ROUND}`;
+    g.fillStyle = '#14151a';
+    g.font = `900 34px ${ROUND}`;
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText('!', -164, -16);
+    g.fillText('!', -162, -26);
 
-    g.fillStyle = '#1a1620';
+    g.fillStyle = '#ffd21c';
     g.textAlign = 'left';
-    g.font = `900 60px ${ROUND}`;
-    g.fillText('WARNING', -106, -34);
-    g.font = `700 20px ${ROUND}`;
-    g.fillText('CAUTION / 注意', -108, 14);
-    g.fillText('MOVING PARTS', -108, 42);
+    g.font = `900 54px ${ROUND}`;
+    g.fillText('WARNING', -112, -33);
+
+    g.fillStyle = '#14151a';
+    g.textAlign = 'center';
+    g.font = `800 22px ${ROUND}`;
+    g.fillText('CAUTION / 可動部注意', 0, 24);
+    g.fillText('KEEP HANDS CLEAR OF CLAW', 0, 54);
     g.restore();
   });
 }
 
-/** cool grey-lavender chamber back wall with architectural depth + ghost reflections */
+/**
+ * Bright, clean cool silver-blue chamber back wall with soft studio reflections
+ * and subtle architectural depth (no fake static ghost claw that confuses Z depth!).
+ */
 function chamberBackTexture() {
   return printedTexture(512, 512, (g) => {
     const bg = g.createLinearGradient(0, 0, 0, 512);
-    bg.addColorStop(0, '#848a9e');
-    bg.addColorStop(0.45, '#7c8296');
-    bg.addColorStop(1, '#6d7389');
+    bg.addColorStop(0, '#a8c4de');
+    bg.addColorStop(0.26, '#7f98b4');
+    bg.addColorStop(0.64, '#5c6f8a');
+    bg.addColorStop(1, '#46556e');
     g.fillStyle = bg;
     g.fillRect(0, 0, 512, 512);
 
-    // side frame pillars
-    g.fillStyle = 'rgba(56, 62, 84, 0.55)';
-    g.fillRect(0, 0, 34, 512);
-    g.fillRect(478, 0, 34, 512);
-    g.fillStyle = 'rgba(214, 224, 242, 0.22)';
-    g.fillRect(34, 0, 6, 512);
-    g.fillRect(472, 0, 6, 512);
-    g.fillStyle = 'rgba(40, 44, 64, 0.28)';
-    g.fillRect(34, 0, 2, 512);
-    g.fillRect(476, 0, 2, 512);
+    // Side inner structural frame channels
+    g.fillStyle = 'rgba(46, 60, 92, 0.36)';
+    g.fillRect(0, 0, 28, 512);
+    g.fillRect(484, 0, 28, 512);
+    g.fillStyle = 'rgba(230, 246, 255, 0.38)';
+    g.fillRect(28, 0, 6, 512);
+    g.fillRect(478, 0, 6, 512);
 
-    // upper structural beam + soft reflection line
-    g.fillStyle = 'rgba(56, 62, 84, 0.4)';
-    g.fillRect(34, 34, 444, 20);
-    const beam = g.createLinearGradient(0, 54, 0, 150);
-    beam.addColorStop(0, 'rgba(236, 246, 255, 0.42)');
-    beam.addColorStop(0.5, 'rgba(222, 236, 252, 0.16)');
-    beam.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    g.fillStyle = beam;
-    g.fillRect(34, 54, 444, 96);
+    // Upper ceiling light wash
+    const topWash = g.createLinearGradient(0, 0, 0, 150);
+    topWash.addColorStop(0, 'rgba(230, 250, 255, 0.65)');
+    topWash.addColorStop(0.45, 'rgba(205, 240, 255, 0.24)');
+    topWash.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    g.fillStyle = topWash;
+    g.fillRect(28, 0, 456, 150);
 
-    // soft vertical light columns behind the neon tubes
+    // Soft glass panel reflection bands
     for (const [cx, cw, alpha] of [
-      [86, 46, 0.16],
-      [166, 34, 0.09],
-      [256, 42, 0.08],
-      [348, 34, 0.09],
-      [428, 46, 0.16],
+      [88, 54, 0.2],
+      [256, 68, 0.12],
+      [424, 54, 0.2],
     ]) {
       const col = g.createLinearGradient(cx - cw / 2, 0, cx + cw / 2, 0);
-      col.addColorStop(0, 'rgba(226, 240, 255, 0)');
-      col.addColorStop(0.5, `rgba(226, 240, 255, ${alpha})`);
-      col.addColorStop(1, 'rgba(226, 240, 255, 0)');
+      col.addColorStop(0, 'rgba(232, 248, 255, 0)');
+      col.addColorStop(0.5, `rgba(232, 248, 255, ${alpha})`);
+      col.addColorStop(1, 'rgba(232, 248, 255, 0)');
       g.fillStyle = col;
-      g.fillRect(cx - cw / 2, 40, cw, 472);
+      g.fillRect(cx - cw / 2, 24, cw, 488);
     }
 
-    // subtle vertical lighting falloff
-    const fall = g.createLinearGradient(0, 0, 0, 512);
-    fall.addColorStop(0, 'rgba(255,255,255,0.09)');
-    fall.addColorStop(0.5, 'rgba(255,255,255,0)');
-    fall.addColorStop(1, 'rgba(34, 38, 58, 0.28)');
-    g.fillStyle = fall;
-    g.fillRect(0, 0, 512, 512);
-
-    // ghost reflection of the claw hanging from the top
-    g.save();
-    g.globalAlpha = 0.11;
-    g.strokeStyle = '#eef3ff';
-    g.lineWidth = 3;
-    g.lineCap = 'round';
-    g.beginPath();
-    g.moveTo(256, 40);
-    g.lineTo(256, 108);
-    g.stroke();
-    g.lineWidth = 4;
-    g.beginPath();
-    g.moveTo(256, 108);
-    g.lineTo(232, 156);
-    g.lineTo(218, 208);
-    g.stroke();
-    g.beginPath();
-    g.moveTo(256, 108);
-    g.lineTo(280, 156);
-    g.lineTo(294, 208);
-    g.stroke();
-    g.beginPath();
-    g.moveTo(256, 108);
-    g.lineTo(256, 160);
-    g.lineTo(252, 212);
-    g.stroke();
-    g.restore();
-
-    // faint ghostly capsule reflections near the floor
-    g.save();
-    g.globalAlpha = 0.08;
-    g.fillStyle = '#e5ebf8';
-    for (const [x, y, s] of [
-      [110, 400, 1.0],
-      [398, 350, 0.8],
-      [232, 452, 1.15],
-      [316, 430, 0.9],
-    ]) {
-      for (const [dx, dy, r] of [
-        [-34, 6, 25],
-        [-6, -8, 33],
-        [28, 2, 27],
-        [52, 11, 18],
-      ]) {
-        g.beginPath();
-        g.ellipse(x + dx * s, y + dy * s, r * s, r * 0.62 * s, 0, 0, Math.PI * 2);
-        g.fill();
-      }
-    }
-    g.restore();
-
-    // very soft cyan bloom at both inner edges (neon tubes sit in front)
-    const edge = g.createLinearGradient(0, 0, 70, 0);
-    edge.addColorStop(0, 'rgba(200, 248, 255, 0.28)');
-    edge.addColorStop(1, 'rgba(200, 248, 255, 0)');
+    // Subtle vertical LED glow bleed at both inner corners
+    const edge = g.createLinearGradient(0, 0, 80, 0);
+    edge.addColorStop(0, 'rgba(205, 252, 255, 0.45)');
+    edge.addColorStop(1, 'rgba(205, 252, 255, 0)');
     g.fillStyle = edge;
-    g.fillRect(34, 54, 70, 458);
+    g.fillRect(28, 20, 80, 492);
     g.save();
     g.translate(512, 0);
     g.scale(-1, 1);
     g.fillStyle = edge;
-    g.fillRect(34, 54, 70, 458);
+    g.fillRect(28, 20, 80, 492);
     g.restore();
+
+    // Deep floor horizon shadow for rich 3D depth contrast behind the capsule pile
+    const floorShadow = g.createLinearGradient(0, 350, 0, 512);
+    floorShadow.addColorStop(0, 'rgba(20, 30, 52, 0)');
+    floorShadow.addColorStop(1, 'rgba(16, 24, 44, 0.56)');
+    g.fillStyle = floorShadow;
+    g.fillRect(0, 380, 512, 132);
   });
 }
 
@@ -1107,14 +1113,14 @@ function streakTexture() {
 
 export function glassMaterial() {
   return new THREE.MeshStandardMaterial({
-    color: '#eef8ff',
+    color: '#eef9ff',
     metalness: 0.05,
-    roughness: 0.05,
+    roughness: 0.04,
     transparent: true,
-    opacity: 0.06,
+    opacity: 0.055,
     side: THREE.DoubleSide,
     depthWrite: false,
-    envMapIntensity: 1.3,
+    envMapIntensity: 1.4,
   }) as unknown as THREE.MeshPhysicalMaterial;
 }
 
@@ -1182,14 +1188,13 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   const root = new THREE.Group();
 
   const pink = candy(REF.framePink);
-  const pinkDeep = candy(REF.framePinkShade, { roughness: 0.24 });
-  const pinkInk = candy(CAB.pinkInk, { roughness: 0.26 });
-  const azure = candy(REF.sidePostBlue, { roughness: 0.18 });
-  const azureMid = candy('#49a9e8', { roughness: 0.22 });
-  const azureDeep = candy(REF.bandBlue, { roughness: 0.26 });
-  const azurePale = candy(REF.glassTint, { roughness: 0.36 });
-  const deckBlue = candy(REF.panelBlue, { roughness: 0.16 });
-  const porcelain = candy(REF.bottomWhite, { roughness: 0.26 });
+  const pinkDeep = candy(REF.framePinkShade, { roughness: 0.22 });
+  const azure = candy(REF.sidePostBlue, { roughness: 0.14 });
+  const azureMid = candy('#36465e', { roughness: 0.32 });
+  const azureDeep = candy(REF.bandBlue, { roughness: 0.18 });
+  const azurePale = candy(REF.glassTint, { roughness: 0.26 });
+  const deckBlue = candy(REF.panelBlue, { roughness: 0.14 });
+  const porcelain = candy(REF.bottomWhite, { roughness: 0.24 });
   const rub = rubber();
   const chromeMat = chrome();
   const glass = glassMaterial();
@@ -1198,144 +1203,141 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
   /* ---------------- feet + lower body ---------------- */
 
   for (const [x, z] of [
-    [-0.42, 0.28],
-    [0.42, 0.28],
-    [-0.42, -0.28],
-    [0.42, -0.28],
+    [-0.41, 0.28],
+    [0.41, 0.28],
+    [-0.41, -0.28],
+    [0.41, -0.28],
   ]) {
-    add(root, new THREE.CylinderGeometry(0.066, 0.072, 0.036, 20), rub, x, 0.018, z, true, false);
-    add(root, new THREE.CylinderGeometry(0.058, 0.062, 0.01, 20), ink, x, 0.004, z, false, false);
+    add(root, new THREE.CylinderGeometry(0.068, 0.074, 0.036, 20), rub, x, 0.018, z, true, false);
+    add(root, new THREE.CylinderGeometry(0.06, 0.064, 0.01, 20), ink, x, 0.004, z, false, false);
   }
 
-  // dark under-chassis plate closes the bright gap between the feet
   add(root, rbox(0.96, 0.018, 0.72, 0.008), ink, 0, 0.032, 0, false, false);
 
-  add(root, rbox(1.02, 0.56, 0.78, 0.048), pink, 0, 0.322, 0, true, false);
-  add(root, rbox(1.036, 0.048, 0.794, 0.018), pinkDeep, 0, 0.072, 0, false, false);
+  add(root, rbox(1.03, 0.56, 0.78, 0.052), pink, 0, 0.322, 0, true, false);
+  add(root, rbox(1.04, 0.044, 0.794, 0.018), pinkDeep, 0, 0.072, 0, false, false);
 
-  add(root, rbox(0.92, 0.45, 0.02, 0.024), porcelain, 0, 0.365, 0.386, false, false);
+  add(root, rbox(0.92, 0.45, 0.02, 0.022), porcelain, 0, 0.355, 0.386, false, false);
   add(
     root,
     new THREE.PlaneGeometry(0.9, 0.435),
-    printed(bodyTexture(), { roughness: 0.3 }),
+    printed(bodyTexture(), { roughness: 0.26 }),
     0,
-    0.365,
-    0.3975,
+    0.355,
+    0.398,
     false,
     false
   );
 
-  add(root, rbox(0.95, 0.026, 0.018, 0.008), pinkDeep, 0, 0.594, 0.394, false, false);
-  add(root, rbox(0.95, 0.026, 0.018, 0.008), pinkDeep, 0, 0.136, 0.394, false, false);
-  add(root, rbox(0.026, 0.48, 0.018, 0.008), pinkDeep, -0.468, 0.365, 0.394, false, false);
-  add(root, rbox(0.026, 0.48, 0.018, 0.008), pinkDeep, 0.468, 0.365, 0.394, false, false);
+  // Subtle pink recessed bezel trim framing the white front panel
+  add(root, rbox(0.955, 0.024, 0.016, 0.008), pinkDeep, 0, 0.582, 0.393, false, false);
+  add(root, rbox(0.955, 0.024, 0.016, 0.008), pinkDeep, 0, 0.128, 0.393, false, false);
+  add(root, rbox(0.024, 0.478, 0.016, 0.008), pinkDeep, -0.468, 0.355, 0.393, false, false);
+  add(root, rbox(0.024, 0.478, 0.016, 0.008), pinkDeep, 0.468, 0.355, 0.393, false, false);
 
-  /* ---------------- riser + control deck ---------------- */
-
-  add(root, rbox(1.0, 0.024, 0.04, 0.008), pink, 0, 0.718, 0.388, false, false);
+  /* ---------------- control deck (blue inset + rounded pink bumper) ---------------- */
 
   const deck = new THREE.Group();
-  deck.position.set(0, 0.585, 0.45);
+  deck.position.set(0, 0.586, 0.452);
   deck.rotation.x = 0.21;
   root.add(deck);
 
-  add(deck, rbox(1.0, 0.068, 0.39, 0.028), deckBlue, 0, 0, 0, true, false);
-  add(deck, rbox(1.036, 0.036, 0.376, 0.014), pinkDeep, 0, -0.042, 0, true, false);
-  add(deck, rbox(1.044, 0.012, 0.384, 0.005), pinkInk, 0, -0.064, 0, false, false);
+  // Vivid blue control panel top seated inside a smooth rounded baby-pink outer bumper bezel
+  add(deck, rbox(0.99, 0.064, 0.386, 0.026), deckBlue, 0, 0.002, 0, true, false);
+  add(deck, rbox(1.045, 0.048, 0.412, 0.024), pink, 0, -0.024, 0.008, true, false);
+  add(deck, rbox(1.042, 0.018, 0.406, 0.009), pinkDeep, 0, -0.052, 0.006, false, false);
 
   const deckPrint = add(
     deck,
-    new THREE.PlaneGeometry(0.965, 0.365),
-    printed(deckTexture(), { roughness: 0.28 }),
+    new THREE.PlaneGeometry(DECK_W, DECK_D),
+    printed(deckTexture(), { roughness: 0.48 }),
     0,
-    0.035,
+    0.0352,
     0,
     false,
     false
   );
   deckPrint.rotation.x = -Math.PI / 2;
 
-  const joyX = -0.27;
-  const joyZ = 0.02;
-  // flat, sleek black dust washer under the shaft
-  add(deck, new THREE.CylinderGeometry(0.066, 0.068, 0.007, 28), ink, joyX, 0.039, joyZ, false, false);
+  // Sleek tapered black dust washer under the joystick shaft
+  add(deck, new THREE.CylinderGeometry(0.062, 0.068, 0.007, 32), ink, JOY_X, 0.039, JOY_Z, false, false);
 
   const stick = new THREE.Group();
-  stick.position.set(joyX, 0.044, joyZ);
+  stick.position.set(JOY_X, 0.044, JOY_Z);
   stick.userData.noMerge = true;
   deck.add(stick);
 
   const rodMat = new THREE.MeshStandardMaterial({
-    color: '#eef3f8',
-    metalness: 0.78,
-    roughness: 0.16,
-    envMapIntensity: 1.4,
+    color: '#f2f6fc',
+    metalness: 0.88,
+    roughness: 0.12,
+    envMapIntensity: 1.6,
   });
-  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.009, 0.09, 12), rodMat);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.0095, 0.092, 14), rodMat);
   rod.position.y = 0.046;
   stick.add(rod);
 
-  const ballMat = candy('#d6151f', { roughness: 0.08, metalness: 0.04, envMapIntensity: 1.45 });
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.037, 24, 18), ballMat);
-  ball.position.y = 0.105;
+  // Larger, ultra-glossy deep cherry-red ball matching reference/target.png!
+  const ballMat = candy('#dc0e1a', {
+    roughness: 0.05,
+    metalness: 0.02,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.04,
+    envMapIntensity: 1.65,
+  });
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.043, 28, 20), ballMat);
+  ball.position.y = 0.112;
+  ball.castShadow = true;
   stick.add(ball);
-  const ballHighlight = new THREE.Mesh(
-    new THREE.SphereGeometry(0.011, 10, 8),
-    new THREE.MeshBasicMaterial({ color: '#fff4f4', transparent: true, opacity: 0.62 })
-  );
-  ballHighlight.position.set(-0.012, 0.127, 0.03);
-  ballHighlight.scale.set(1, 0.72, 0.55);
-  ballHighlight.userData.noMerge = true;
-  stick.add(ballHighlight);
 
-  const btnX = 0.255;
-  const btnZ = -0.01;
-  // low, sleek matte-black bezel ring around the illuminated yellow dome
-  add(deck, new THREE.CylinderGeometry(0.092, 0.098, 0.015, 32), ink, btnX, 0.0415, btnZ, false, false);
-  add(deck, new THREE.TorusGeometry(0.088, 0.012, 8, 36), ink, btnX, 0.05, btnZ, false, false).rotation.x =
+  // Sleeker dark bezel + blazing luminous amber-gold arcade button
+  add(deck, new THREE.CylinderGeometry(0.088, 0.094, 0.014, 32), ink, BTN_X, 0.041, BTN_Z, false, false);
+  add(deck, new THREE.TorusGeometry(0.084, 0.009, 8, 36), ink, BTN_X, 0.049, BTN_Z, false, false).rotation.x =
     Math.PI / 2;
-  add(deck, new THREE.TorusGeometry(0.078, 0.0045, 6, 32), chromeMat, btnX, 0.054, btnZ, false, false).rotation.x =
+  add(deck, new THREE.TorusGeometry(0.077, 0.0038, 6, 32), chromeMat, BTN_X, 0.0525, BTN_Z, false, false).rotation.x =
     Math.PI / 2;
   const btnGlowRing = add(
     deck,
-    new THREE.TorusGeometry(0.072, 0.0045, 6, 32),
-    glow('#fff5b8', 1.15),
-    btnX,
-    0.054,
-    btnZ,
+    new THREE.TorusGeometry(0.072, 0.005, 6, 32),
+    glow('#fff4a8', 1.4),
+    BTN_X,
+    0.053,
+    BTN_Z,
     false,
     false
   );
   btnGlowRing.rotation.x = Math.PI / 2;
 
-  const capMat = new THREE.MeshStandardMaterial({
-    color: '#ffe055',
-    emissive: new THREE.Color('#ffd230'),
-    emissiveIntensity: 0.95,
-    roughness: 0.12,
-    metalness: 0.02,
-    envMapIntensity: 1.3,
+  const capMat = new THREE.MeshPhysicalMaterial({
+    color: '#ffd82e',
+    emissive: new THREE.Color('#ffbe14'),
+    emissiveIntensity: 1.15,
+    roughness: 0.08,
+    metalness: 0.0,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.06,
+    envMapIntensity: 1.4,
   });
   const capGroup = new THREE.Group();
-  capGroup.position.set(btnX, 0.046, btnZ);
+  capGroup.position.set(BTN_X, 0.046, BTN_Z);
   capGroup.userData.noMerge = true;
   deck.add(capGroup);
 
-  const capSide = new THREE.Mesh(new THREE.CylinderGeometry(0.068, 0.072, 0.02, 32), capMat);
-  capSide.position.y = 0.008;
+  const capSide = new THREE.Mesh(new THREE.CylinderGeometry(0.069, 0.073, 0.022, 32), capMat);
+  capSide.position.y = 0.009;
   capGroup.add(capSide);
-  const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.07, 24, 14), capMat);
-  capTop.scale.set(1, 0.32, 1);
-  capTop.position.y = 0.018;
+  const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.071, 24, 14), capMat);
+  capTop.scale.set(1, 0.34, 1);
+  capTop.position.y = 0.02;
   capGroup.add(capTop);
 
-  // bright illuminated-plastic highlight core on top of the dome
+  // Soft warm inner illuminated core on the dome
   const capHot = new THREE.Mesh(
-    new THREE.SphereGeometry(0.034, 18, 10),
-    new THREE.MeshBasicMaterial({ color: '#fffbe0', transparent: true, opacity: 0.62, toneMapped: false })
+    new THREE.SphereGeometry(0.042, 18, 10),
+    new THREE.MeshBasicMaterial({ color: '#fffbe0', transparent: true, opacity: 0.68, toneMapped: false })
   );
-  capHot.scale.set(1, 0.24, 0.82);
-  capHot.position.set(-0.012, 0.0405, 0.012);
+  capHot.scale.set(1, 0.24, 0.86);
+  capHot.position.set(0, 0.042, 0.004);
   capHot.userData.noMerge = true;
   capGroup.add(capHot);
 
@@ -1343,14 +1345,14 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     new THREE.BoxGeometry(0.26, 0.18, 0.26),
     new THREE.MeshBasicMaterial({ visible: false })
   );
-  buttonHit.position.set(btnX, 0.085, btnZ);
+  buttonHit.position.set(BTN_X, 0.085, BTN_Z);
   deck.add(buttonHit);
 
   /* ---------------- play chamber ---------------- */
 
   add(root, rbox(0.99, 0.028, 0.74, 0.012), azureMid, 0, 0.706, 0, false, true);
 
-  add(root, new THREE.PlaneGeometry(0.2, 0.2), new THREE.MeshBasicMaterial({ color: '#142644' }), -0.31, 0.721, 0).rotation.x =
+  add(root, new THREE.PlaneGeometry(0.2, 0.2), new THREE.MeshBasicMaterial({ color: '#10203a' }), -0.31, 0.721, 0).rotation.x =
     -Math.PI / 2;
   for (const [w, d, x, z] of [
     [0.218, 0.009, -0.31, 0.1045],
@@ -1361,29 +1363,34 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     add(root, rbox(w, 0.005, d, 0.002), chromeMat, x, 0.723, z);
   }
 
-  // clear acrylic prize chute box: four glossy transparent divider walls with
-  // bright white top edges and chrome corner trim
-  const acrylic = new THREE.MeshStandardMaterial({
-    color: '#dff4ff',
+  // Sleek crystal-clear acrylic prize chute divider box (height 0.19 m matches physics!)
+  const acrylic = new THREE.MeshPhysicalMaterial({
+    color: '#e4f6ff',
     metalness: 0.02,
-    roughness: 0.045,
+    roughness: 0.04,
     transparent: true,
-    opacity: 0.24,
+    opacity: 0.14,
+    clearcoat: 0.9,
     side: THREE.DoubleSide,
     depthWrite: false,
-    envMapIntensity: 1.55,
+    envMapIntensity: 1.5,
   });
-  const acrylicEdge = new THREE.MeshBasicMaterial({ color: '#f4fdff', toneMapped: false });
+  const acrylicEdge = new THREE.MeshStandardMaterial({
+    color: '#d4ecff',
+    roughness: 0.12,
+    metalness: 0.12,
+    transparent: true,
+    opacity: 0.42,
+  });
   const chuteCx = -0.31;
   const chuteCz = 0;
-  const chuteHalf = 0.11;
+  const chuteHalf = 0.108;
   const chuteH = 0.19;
   const chuteBase = 0.723;
   const chuteTop = chuteBase + chuteH;
   const chuteCY = chuteBase + chuteH / 2;
 
   const chuteWalls: [number, number, number, number, number][] = [
-    // width, height, x, z, rotY
     [chuteHalf * 2, chuteH, chuteCx, chuteCz - chuteHalf, 0],
     [chuteHalf * 2, chuteH, chuteCx, chuteCz + chuteHalf, 0],
     [chuteHalf * 2, chuteH, chuteCx - chuteHalf, chuteCz, Math.PI / 2],
@@ -1395,248 +1402,256 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
     wall.renderOrder = 3;
   }
 
-  // top edge highlights
+  // Subtle thin acrylic polished top rim (no heavy white wireframe cage)
   for (const [w, d, x, z] of [
-    [chuteHalf * 2 + 0.006, 0.008, chuteCx, chuteCz - chuteHalf],
-    [chuteHalf * 2 + 0.006, 0.008, chuteCx, chuteCz + chuteHalf],
-    [0.008, chuteHalf * 2 + 0.006, chuteCx - chuteHalf, chuteCz],
-    [0.008, chuteHalf * 2 + 0.006, chuteCx + chuteHalf, chuteCz],
+    [chuteHalf * 2 + 0.004, 0.004, chuteCx, chuteCz - chuteHalf],
+    [chuteHalf * 2 + 0.004, 0.004, chuteCx, chuteCz + chuteHalf],
+    [0.004, chuteHalf * 2 + 0.004, chuteCx - chuteHalf, chuteCz],
+    [0.004, chuteHalf * 2 + 0.004, chuteCx + chuteHalf, chuteCz],
   ]) {
-    add(root, rbox(w, 0.007, d, 0.002), acrylicEdge, x, chuteTop, z);
+    add(root, rbox(w, 0.004, d, 0.0015), acrylicEdge, x, chuteTop, z);
   }
-  // chrome corner posts
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
       add(
         root,
-        rbox(0.008, chuteH + 0.006, 0.008, 0.002),
-        chromeMat,
+        rbox(0.0045, chuteH + 0.004, 0.0045, 0.0015),
+        acrylicEdge,
         chuteCx + sx * chuteHalf,
         chuteCY,
-        chuteCz + sz * chuteHalf,
-        false,
-        false
+        chuteCz + sz * chuteHalf
       );
     }
   }
 
-  // cool grey-lavender slate back wall with architectural depth
+  // Clean cool silver-blue chamber back wall
   add(
     root,
     new THREE.PlaneGeometry(0.96, 0.62),
     new THREE.MeshBasicMaterial({ map: chamberBackTexture(), toneMapped: false }),
     0,
-    0.99,
+    1.01,
     -0.372
   );
 
-  // metallic gantry rail across the top of the chamber
-  add(root, rbox(0.9, 0.024, 0.052, 0.008), chromeMat, 0, 1.276, 0.14, true, false);
-  add(root, rbox(0.92, 0.012, 0.062, 0.004), matte('#8e95a8'), 0, 1.262, 0.14, false, false);
-  add(root, rbox(0.055, 0.034, 0.06, 0.008), chromeMat, -0.43, 1.276, 0.14, false, false);
-  add(root, rbox(0.055, 0.034, 0.06, 0.008), chromeMat, 0.43, 1.276, 0.14, false, false);
+  // Metallic gantry rail across the top-rear for the hanging charms
+  add(root, rbox(0.9, 0.018, 0.024, 0.006), chromeMat, 0, 1.288, -0.19, false, false);
+  // Front-top structural rail visible at top of glass
+  add(root, rbox(0.92, 0.018, 0.04, 0.006), chromeMat, 0, 1.304, 0.24, false, false);
 
   add(root, rbox(0.99, 0.018, 0.74, 0.006), azurePale, 0, 1.326, 0);
-  add(root, new THREE.PlaneGeometry(0.94, 0.7), new THREE.MeshBasicMaterial({ color: '#e2f6ff' }), 0, 1.316, 0).rotation.x =
+  add(root, new THREE.PlaneGeometry(0.94, 0.7), new THREE.MeshBasicMaterial({ color: '#dff5ff' }), 0, 1.316, 0).rotation.x =
     Math.PI / 2;
 
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      add(root, rbox(0.076, 0.64, 0.07, 0.02), azure, sx * 0.495, 1.025, sz * 0.35, true, false);
+      add(root, rbox(0.074, 0.64, 0.072, 0.02), azure, sx * 0.492, 1.025, sz * 0.35, true, false);
     }
-    add(root, rbox(0.076, 0.048, 0.78, 0.014), azureDeep, sx * 0.495, 0.738, 0);
-    add(root, rbox(0.076, 0.048, 0.78, 0.014), azureDeep, sx * 0.495, 1.312, 0);
-    const sidePane = add(root, new THREE.PlaneGeometry(0.68, 0.575), glass, sx * 0.501, 1.025, 0);
+    add(root, rbox(0.074, 0.046, 0.78, 0.014), azureDeep, sx * 0.492, 0.732, 0);
+    add(root, rbox(0.074, 0.046, 0.78, 0.014), azureDeep, sx * 0.492, 1.312, 0);
+    const sidePane = add(root, new THREE.PlaneGeometry(0.68, 0.575), glass, sx * 0.498, 1.025, 0);
     sidePane.rotation.y = sx * (Math.PI / 2);
     sidePane.renderOrder = 3;
   }
 
-  // Front window frame: bright blue vertical pillars + pink inner glass trim matching photo
+  // Front window frame matching reference/target.png:
+  // Vivid electric-blue side posts + vivid blue bottom sill + slim bright chrome inner trim (NO pink box!)
   const frameZ = 0.394;
-  add(root, rbox(0.92, 0.048, 0.08, 0.018), pink, 0, 1.322, frameZ, true, false);
-  add(root, rbox(0.92, 0.048, 0.08, 0.018), pink, 0, 0.734, frameZ);
-  add(root, rbox(0.068, 0.64, 0.086, 0.02), azure, -0.486, 1.028, frameZ, true, false);
-  add(root, rbox(0.068, 0.64, 0.086, 0.02), azure, 0.486, 1.028, frameZ, true, false);
-  add(root, rbox(0.024, 0.57, 0.08, 0.008), pink, -0.444, 1.028, frameZ + 0.002);
-  add(root, rbox(0.024, 0.57, 0.08, 0.008), pink, 0.444, 1.028, frameZ + 0.002);
+  // Crisp electric-blue lower fascia band between glass sill and deck (holds WARNING plate cleanly above button)
+  add(root, rbox(0.95, 0.072, 0.074, 0.012), azure, 0, 0.706, frameZ - 0.004, true, false);
+  add(root, rbox(0.92, 0.024, 0.076, 0.01), azureDeep, 0, 1.33, frameZ, false, false);
+  add(root, rbox(0.072, 0.65, 0.088, 0.02), azure, -0.484, 1.028, frameZ, true, false);
+  add(root, rbox(0.072, 0.65, 0.088, 0.02), azure, 0.484, 1.028, frameZ, true, false);
+  // Sleek slim silver-white inner glass channels
+  add(root, rbox(0.014, 0.59, 0.068, 0.005), chromeMat, -0.445, 1.028, frameZ + 0.004);
+  add(root, rbox(0.014, 0.59, 0.068, 0.005), chromeMat, 0.445, 1.028, frameZ + 0.004);
+  add(root, rbox(0.9, 0.012, 0.068, 0.004), chromeMat, 0, 0.742, frameZ + 0.004);
 
-  // vertical cyan/white neon tubes inside the window with soft glow planes
-  const neonTubeMat = new THREE.MeshBasicMaterial({ color: '#b7f2f8', toneMapped: false });
+  // Bright vertical cyan-white LED strips inside both front corners of the glass box
+  const neonTubeMat = new THREE.MeshBasicMaterial({ color: '#c4f8ff', toneMapped: false });
   const neonCoreMat = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false });
   const neonGlowMat = new THREE.MeshBasicMaterial({
-    color: '#7fe4f2',
+    color: '#78e8ff',
     transparent: true,
-    opacity: 0.38,
+    opacity: 0.44,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
   const neonHaloMat = new THREE.MeshBasicMaterial({
-    color: '#dffcff',
+    color: '#e8feff',
     transparent: true,
-    opacity: 0.55,
+    opacity: 0.65,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
   for (const sx of [-1, 1]) {
-    const glow = add(root, new THREE.PlaneGeometry(0.15, 0.6), neonGlowMat, sx * 0.414, 1.025, 0.314);
-    glow.renderOrder = 2;
-    const halo = add(root, new THREE.PlaneGeometry(0.05, 0.6), neonHaloMat, sx * 0.414, 1.025, 0.318);
+    const gPlane = add(root, new THREE.PlaneGeometry(0.14, 0.59), neonGlowMat, sx * 0.422, 1.025, 0.325);
+    gPlane.renderOrder = 2;
+    const halo = add(root, new THREE.PlaneGeometry(0.048, 0.59), neonHaloMat, sx * 0.422, 1.025, 0.33);
     halo.renderOrder = 2;
-    add(root, new THREE.CylinderGeometry(0.011, 0.011, 0.58, 12), neonTubeMat, sx * 0.414, 1.025, 0.33);
-    add(root, new THREE.CylinderGeometry(0.005, 0.005, 0.58, 8), neonCoreMat, sx * 0.414, 1.025, 0.334);
+    add(root, new THREE.CylinderGeometry(0.01, 0.01, 0.58, 12), neonTubeMat, sx * 0.422, 1.025, 0.34);
+    add(root, new THREE.CylinderGeometry(0.005, 0.005, 0.58, 8), neonCoreMat, sx * 0.422, 1.025, 0.344);
   }
 
-  // horizontal neon glow just under the blue header
-  const topGlow = add(root, new THREE.PlaneGeometry(0.9, 0.085), neonGlowMat, 0, 1.297, 0.31);
+  // Top horizontal LED tube just under the blue header
+  const topGlow = add(root, new THREE.PlaneGeometry(0.88, 0.075), neonGlowMat, 0, 1.308, 0.322);
   topGlow.renderOrder = 2;
-  const topTube = add(root, new THREE.CylinderGeometry(0.007, 0.007, 0.88, 10), neonTubeMat, 0, 1.299, 0.322);
+  const topTube = add(root, new THREE.CylinderGeometry(0.007, 0.007, 0.86, 10), neonTubeMat, 0, 1.31, 0.334);
   topTube.rotation.z = Math.PI / 2;
-  const topCore = add(root, new THREE.CylinderGeometry(0.0034, 0.0034, 0.88, 8), neonCoreMat, 0, 1.299, 0.326);
+  const topCore = add(root, new THREE.CylinderGeometry(0.0034, 0.0034, 0.86, 8), neonCoreMat, 0, 1.31, 0.338);
   topCore.rotation.z = Math.PI / 2;
 
-  const glassFront = add(root, new THREE.PlaneGeometry(0.88, 0.57), glass, 0, 1.025, 0.401);
+  const glassFront = add(root, new THREE.PlaneGeometry(0.88, 0.58), glass, 0, 1.028, 0.402);
   glassFront.renderOrder = 3;
 
-  // soft diagonal white glass reflection streaks
+  // Soft diagonal white glass reflection streaks
   const streak = streakTexture();
   const streakMat = new THREE.MeshBasicMaterial({
     map: streak,
     transparent: true,
-    opacity: 0.06,
+    opacity: 0.08,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
-  const reflection = add(root, new THREE.PlaneGeometry(0.75, 0.14), streakMat, -0.06, 1.15, 0.405);
+  const reflection = add(root, new THREE.PlaneGeometry(0.75, 0.14), streakMat, -0.06, 1.15, 0.406);
   reflection.rotation.z = 0.45;
   reflection.renderOrder = 4;
 
-  const reflection2 = add(root, new THREE.PlaneGeometry(0.34, 0.075), streakMat, 0.25, 1.24, 0.406);
+  const reflection2 = add(root, new THREE.PlaneGeometry(0.34, 0.075), streakMat, 0.25, 1.24, 0.407);
   reflection2.rotation.z = 0.42;
   reflection2.renderOrder = 4;
 
-  const reflection3 = add(root, new THREE.PlaneGeometry(0.2, 0.05), streakMat, -0.31, 0.83, 0.406);
-  reflection3.rotation.z = 0.5;
-  reflection3.renderOrder = 4;
-
-  // yellow WARNING plate mounted on the lower frame above the button
+  // Yellow WARNING plate mounted cleanly on the vertical blue fascia right above the PLAY button
   const warnPlate = add(
     root,
-    new THREE.PlaneGeometry(0.15, 0.0586),
+    new THREE.PlaneGeometry(0.162, 0.058),
     new THREE.MeshBasicMaterial({
       map: warningPlateTexture(),
       transparent: true,
       depthWrite: false,
       toneMapped: false,
     }),
-    0.3,
-    0.728,
-    0.4365
+    0.308,
+    0.708,
+    0.431
   );
-  warnPlate.rotation.z = -0.03;
+  warnPlate.rotation.z = 0.0;
   warnPlate.renderOrder = 5;
 
   /* ---------------- blue header band ---------------- */
 
-  add(root, rbox(1.045, 0.12, 0.11, 0.02), azureDeep, 0, 1.397, 0.345, true, false);
+  add(root, rbox(1.042, 0.122, 0.112, 0.02), azureDeep, 0, 1.398, 0.345, true, false);
   add(
     root,
-    new THREE.PlaneGeometry(1.02, 0.108),
+    new THREE.PlaneGeometry(1.02, 0.11),
     new THREE.MeshBasicMaterial({ map: headerTexture(), toneMapped: false }),
     0,
-    1.397,
-    0.4015
+    1.398,
+    0.4025
   );
-  add(root, rbox(1.048, 0.01, 0.114, 0.004), azurePale, 0, 1.34, 0.345);
+  add(root, rbox(1.044, 0.008, 0.114, 0.003), azurePale, 0, 1.339, 0.345);
 
-  /* ---------------- marquee (UFO PORTFOLIO) ---------------- */
+  /* ---------------- marquee (UFO PORTFOLIO) — clean rounded pink ears ---------------- */
 
-  add(root, rbox(1.04, 0.34, 0.175, 0.035), pinkDeep, 0, 1.602, 0.295, true, false);
-  add(root, rbox(1.0, 0.305, 0.18, 0.028), pink, 0, 1.602, 0.302);
-  add(root, rbox(1.05, 0.024, 0.184, 0.008), pinkInk, 0, 1.78, 0.295);
+  add(root, rbox(1.03, 0.34, 0.18, 0.036), pink, 0, 1.608, 0.295, true, false);
+  add(root, rbox(0.99, 0.305, 0.184, 0.028), pinkDeep, 0, 1.608, 0.302);
 
-  // rounded pink vertical side ears/caps framing the marquee
+  // Clean smooth rounded pink vertical side ears/caps flush with the cabinet width (matching reference!)
   for (const sx of [-1, 1]) {
-    add(root, rbox(0.064, 0.34, 0.205, 0.032), pinkDeep, sx * 0.518, 1.598, 0.282, true, false);
-    add(root, rbox(0.046, 0.30, 0.19, 0.024), pink, sx * 0.518, 1.598, 0.29);
-    add(root, rbox(0.04, 0.026, 0.15, 0.01), pinkInk, sx * 0.518, 1.79, 0.28);
+    add(root, rbox(0.052, 0.354, 0.198, 0.026), pink, sx * 0.494, 1.608, 0.288, true, false);
+    add(root, rbox(0.032, 0.312, 0.188, 0.016), pinkDeep, sx * 0.488, 1.608, 0.294);
   }
-  add(root, rbox(1.06, 0.05, 0.194, 0.02), pink, 0, 1.79, 0.288, true, false);
-  add(root, rbox(1.08, 0.018, 0.02, 0.008), pinkInk, 0, 1.806, 0.382);
+  // Smooth rounded pink top cap matching reference silhouette
+  add(root, rbox(1.016, 0.036, 0.19, 0.016), pink, 0, 1.775, 0.29, true, false);
 
   const marqueeTex = marqueeTexture();
   add(
     root,
-    new THREE.PlaneGeometry(0.95, 0.29),
-    backlit(marqueeTex, 0.18),
+    new THREE.PlaneGeometry(0.955, 0.292),
+    backlit(marqueeTex, 0.45),
     0,
-    1.602,
-    0.3945
+    1.608,
+    0.3965
   );
 
-  add(root, rbox(0.98, 0.024, 0.014, 0.006), pinkDeep, 0, 1.75, 0.3935);
-  add(root, rbox(0.98, 0.022, 0.014, 0.006), pinkDeep, 0, 1.454, 0.3935);
-  add(root, rbox(0.024, 0.318, 0.014, 0.006), pinkDeep, -0.478, 1.602, 0.3935);
-  add(root, rbox(0.024, 0.318, 0.014, 0.006), pinkDeep, 0.478, 1.602, 0.3935);
+  // Subtle pink inner bezel framing the glowing cyan marquee
+  add(root, rbox(0.98, 0.02, 0.014, 0.006), pink, 0, 1.756, 0.395);
+  add(root, rbox(0.98, 0.02, 0.014, 0.006), pink, 0, 1.46, 0.395);
+  add(root, rbox(0.02, 0.316, 0.014, 0.006), pink, -0.478, 1.608, 0.395);
+  add(root, rbox(0.02, 0.316, 0.014, 0.006), pink, 0.478, 1.608, 0.395);
 
-  // dimensional cyan neon tubes around the marquee opening
-  const marqueeNeon = new THREE.MeshBasicMaterial({ color: '#dffcff', toneMapped: false });
+  // Dimensional glowing cyan neon border tubes around the marquee opening
+  const marqueeNeon = new THREE.MeshBasicMaterial({ color: '#e6feff', toneMapped: false });
   const marqueeGlow = new THREE.MeshBasicMaterial({
-    color: '#b7f2f8',
+    color: '#7ef0ff',
     transparent: true,
-    opacity: 0.3,
+    opacity: 0.36,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
   for (const [w, h, x, y] of [
-    [0.91, 0.012, 0, 1.737],
-    [0.91, 0.012, 0, 1.467],
-    [0.012, 0.27, -0.454, 1.602],
-    [0.012, 0.27, 0.454, 1.602],
+    [0.915, 0.014, 0, 1.741],
+    [0.915, 0.014, 0, 1.475],
+    [0.014, 0.27, -0.456, 1.608],
+    [0.014, 0.27, 0.456, 1.608],
   ] as const) {
-    add(root, new THREE.PlaneGeometry(w, h), marqueeGlow, x, y, 0.4015).renderOrder = 4;
-    add(root, new THREE.CylinderGeometry(0.0045, 0.0045, w > h ? w : h, 8), marqueeNeon, x, y, 0.404).rotation.z =
+    add(root, new THREE.PlaneGeometry(w, h), marqueeGlow, x, y, 0.402).renderOrder = 4;
+    add(root, new THREE.CylinderGeometry(0.0046, 0.0046, w > h ? w : h, 8), marqueeNeon, x, y, 0.405).rotation.z =
       w > h ? Math.PI / 2 : 0;
   }
 
-  // ポートフォリオ sticker fully inside the top-right bezel
+  // Top-right ポートフォリオ sticker tilted CLOCKWISE matching reference/target.png!
   const cornerSticker = add(
     root,
-    new THREE.PlaneGeometry(0.25, 0.048),
+    new THREE.PlaneGeometry(0.245, 0.052),
     new THREE.MeshBasicMaterial({
       map: cornerStickerTexture(),
       transparent: true,
       depthWrite: false,
+      toneMapped: false,
     }),
-    0.385,
-    1.748,
-    0.412
+    0.378,
+    1.735,
+    0.414
   );
-  cornerSticker.rotation.z = 0.12;
+  cornerSticker.rotation.z = -0.15;
   cornerSticker.renderOrder = 5;
 
-  // vertical ポートフォリオ sticker on the front of the right blue pillar
+  // Vertical ポートフォリオ sticker on the front of the right blue pillar
   const sideTex = sideDecalTexture();
   const frontPillarDecal = add(
     root,
-    new THREE.PlaneGeometry(0.068, 0.335),
-    new THREE.MeshBasicMaterial({ map: sideTex, transparent: true, depthWrite: false }),
-    0.488,
+    new THREE.PlaneGeometry(0.068, 0.34),
+    new THREE.MeshBasicMaterial({ map: sideTex, transparent: true, depthWrite: false, toneMapped: false }),
+    0.486,
     1.03,
-    frameZ + 0.0445
+    frameZ + 0.0455
   );
   frontPillarDecal.renderOrder = 4;
 
-  // partial colourful sticker decals on the left blue pillar's outer edge
-  label(root, atlas, rects, 'ゲット', 0.056, 0.056, -0.486, 1.19, frameZ + 0.0445, 0, 0.13);
-  label(root, atlas, rects, 'プライズ', 0.088, 0.05, -0.486, 0.9, frameZ + 0.0445, 0, -0.08);
-  label(root, atlas, rects, 'たんけんちゅう', 0.1, 0.034, -0.53, 1.05, 0.1, -Math.PI / 2, 0.05);
+  // Colorful peeking rectangular stickers on the left blue pillar outer edge (matching reference!)
+  const leftEdgeDecal = add(
+    root,
+    new THREE.PlaneGeometry(0.068, 0.36),
+    new THREE.MeshBasicMaterial({
+      map: leftEdgeStickersTexture(),
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+    -0.488,
+    1.04,
+    frameZ + 0.0455
+  );
+  leftEdgeDecal.renderOrder = 4;
 
-  // side decals from atlas (lightweight)
-  label(root, atlas, rects, 'HANDLE WITH CARE', 0.15, 0.052, -0.512, 0.34, 0.05, -Math.PI / 2, 0.01);
-  label(root, atlas, rects, 'PRIZE', 0.09, 0.032, 0.512, 0.27, -0.08, Math.PI / 2, -0.015);
-  label(root, atlas, rects, 'WARNING', 0.12, 0.042, 0.512, 0.5, -0.16, Math.PI / 2, 0.01);
+  // Side decals from atlas
+  label(root, atlas, rects, 'たんけんちゅう', 0.1, 0.034, -0.53, 1.05, 0.1, -Math.PI / 2, 0.05);
+  label(root, atlas, rects, 'HANDLE WITH CARE', 0.15, 0.052, -0.517, 0.34, 0.05, -Math.PI / 2, 0.01);
+  label(root, atlas, rects, 'PRIZE', 0.09, 0.032, 0.517, 0.27, -0.08, Math.PI / 2, -0.015);
+  label(root, atlas, rects, 'WARNING', 0.12, 0.042, 0.517, 0.5, -0.16, Math.PI / 2, 0.01);
 
   /* ---------------- button behaviour ---------------- */
 
@@ -1650,16 +1665,16 @@ export function buildCabinet(atlas: THREE.Texture, rects: Record<string, UvRect>
 
   function setButtonEnabled(on: boolean) {
     enabled = on;
-    capMat.emissiveIntensity = on ? 0.92 : 0.1;
-    (btnGlowRing.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? 1.15 : 0.15;
+    capMat.emissiveIntensity = on ? 1.15 : 0.12;
+    (btnGlowRing.material as THREE.MeshStandardMaterial).emissiveIntensity = on ? 1.4 : 0.15;
   }
 
   function update(dt: number) {
     if (press > 0) {
-      press = Math.max(0, press - dt * 4.5);
-      capGroup.position.y = capBaseY - 0.01 * Math.sin((1 - press) * Math.PI);
+      press = Math.max(0, press - dt * 5.0);
+      capGroup.position.y = capBaseY - 0.011 * Math.sin((1 - press) * Math.PI);
     }
-    const pulse = enabled ? 0.95 + Math.sin(performance.now() * 0.0032) * 0.07 : 0.1;
+    const pulse = enabled ? 1.15 + Math.sin(performance.now() * 0.0036) * 0.1 : 0.12;
     capMat.emissiveIntensity = pulse;
   }
 

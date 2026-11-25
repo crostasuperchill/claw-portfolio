@@ -12,25 +12,18 @@ import {
  * Parametri delle capsule
  *
  * Una capsula gacha vuota da 7,5 cm pesa ~20 g: la massa è proporzionale al
- * volume (densità ~11,3 kg/m³), così anche una capsula di raggio diverso resta
- * coerente. La plastica è poco rimbalzosa e scorre: restitution 0.12,
- * friction 0.55, damping 0.35/0.55. Il contact skin di 2 mm è la tolleranza
- * con cui il solver tiene separate le superfici: niente compenetrazione
- * visibile, nemmeno a riposo.
+ * volume (densità ~11,3 kg/m³). La plastica è poco rimbalzosa e scorre:
+ * restitution 0.14, friction 0.55, damping 0.35/0.55. Il contact skin di
+ * 2 mm impedisce compenetrazioni visibili anche a riposo.
  * ------------------------------------------------------------------------ */
 const REFERENCE_RADIUS = 0.075;
 const REFERENCE_MASS = 0.02; // kg
 const CAPSULE_DENSITY = REFERENCE_MASS / ((4 / 3) * Math.PI * REFERENCE_RADIUS ** 3);
 
 const CAPSULE_FRICTION = 0.55;
-const CAPSULE_RESTITUTION = 0.12;
+const CAPSULE_RESTITUTION = 0.14;
 const CAPSULE_LINEAR_DAMPING = 0.35;
-const CAPSULE_ANGULAR_DAMPING = 0.55;
-/**
- * Il contact skin sta solo sulle capsule: 2 mm di tolleranza contro la
- * compenetrazione. Se lo mettessi anche sul pavimento le due skin si
- * sommerebbero e la pila "galleggerebbe" 4 mm sopra il piano.
- */
+const CAPSULE_ANGULAR_DAMPING = 0.52;
 const CONTACT_SKIN = 0.002;
 
 const FLOOR_FRICTION = 0.55;
@@ -39,8 +32,11 @@ const WALL_FRICTION = 0.4;
 const CHUTE_FRICTION = 0.9;
 const CHUTE_RESTITUTION = 0;
 
-/** 8 iterazioni: una pila di sfere leggere smette di vibrare e va in sleep. */
-const SOLVER_ITERATIONS = 8;
+/** 10 iterazioni: pila stabile, zero compenetrazioni e sleep rapido. */
+const SOLVER_ITERATIONS = 10;
+
+/** Altezza fisica del divisorio dello chute: allineata al box acrilico visivo (0.19 m). */
+export const CHUTE_WALL_HEIGHT = 0.19;
 
 type TrackedCapsule = { body: RAPIER.RigidBody; collider: RAPIER.Collider; radius: number };
 type Vec = { x: number; y: number; z: number };
@@ -51,7 +47,6 @@ let simTime = 0;
 let lost = 0;
 
 function quatRotate(q: RAPIER.Rotation, v: Vec): Vec {
-  // v' = q v q⁻¹, senza dipendere da three.js.
   const { x, y, z, w } = q;
   const ix = w * v.x + y * v.z - z * v.y;
   const iy = w * v.y + z * v.x - x * v.z;
@@ -70,22 +65,11 @@ export async function initPhysics() {
   world.timestep = 1 / 60;
   world.numSolverIterations = SOLVER_ITERATIONS;
 
-  /* ---------------------------------------------------------------------- *
-   * Presa morbida
-   *
-   * claw.ts crea un joint fixed tra il corpo cinematico e la capsula. Un
-   * fixed trasmette ogni movimento di scatto e, se la capsula è incastrata,
-   * la strappa con un impulso enorme. Qui il joint viene sostituito da un
-   * rope inerte (serve solo come handle per claw.release()) e da un servo
-   * smorzato: la rigidità sale in GRAB_SOFT_RAMP (150 ms), la capsula insegue
-   * il punto di presa con un ritardo elastico e con accelerazione limitata.
-   * Niente teletrasporto, niente scatto.
-   * ---------------------------------------------------------------------- */
   type GrabLink = {
     parent: RAPIER.RigidBody;
     child: RAPIER.RigidBody;
-    anchor1: Vec; // punto di presa, local space del claw
-    anchor2: Vec; // punto di presa, local space della capsula (0 = centro)
+    anchor1: Vec;
+    anchor2: Vec;
     age: number;
     prev: Vec;
   };
@@ -105,14 +89,12 @@ export async function initPhysics() {
     if (!(m > 0) || !Number.isFinite(m)) return;
 
     const target = targetOf(link);
-    // Il corpo cinematico viene aggiornato dopo lo step: la velocità del
-    // target si ricava dal delta, così non serve leggerla da Rapier.
     let vtx = (target.x - link.prev.x) / dt;
     let vty = (target.y - link.prev.y) / dt;
     let vtz = (target.z - link.prev.z) / dt;
     const vtLen = Math.hypot(vtx, vty, vtz);
-    if (vtLen > 3) {
-      const s = 3 / vtLen;
+    if (vtLen > 3.5) {
+      const s = 3.5 / vtLen;
       vtx *= s;
       vty *= s;
       vtz *= s;
@@ -123,14 +105,12 @@ export async function initPhysics() {
     const p = body.translation();
     const v = body.linvel();
 
-    // Velocità desiderata: quella del claw + una correzione di posizione
-    // limitata. Se la capsula è incastrata la correzione non esplode.
-    let dx = (target.x - p.x) / GRAB_FOLLOW_TAU;
-    let dy = (target.y - p.y) / GRAB_FOLLOW_TAU;
-    let dz = (target.z - p.z) / GRAB_FOLLOW_TAU;
+    let dx = (target.x - p.x) / (GRAB_FOLLOW_TAU * 0.85);
+    let dy = (target.y - p.y) / (GRAB_FOLLOW_TAU * 0.85);
+    let dz = (target.z - p.z) / (GRAB_FOLLOW_TAU * 0.85);
     const dLen = Math.hypot(dx, dy, dz);
-    if (dLen > GRAB_MAX_SPEED) {
-      const s = GRAB_MAX_SPEED / dLen;
+    if (dLen > GRAB_MAX_SPEED * 1.25) {
+      const s = (GRAB_MAX_SPEED * 1.25) / dLen;
       dx *= s;
       dy *= s;
       dz *= s;
@@ -139,13 +119,11 @@ export async function initPhysics() {
     dy += vty;
     dz += vtz;
 
-    // Servo di velocità, accelerazione limitata. La gravità viene compensata
-    // a parte: durante la rampa la capsula resta ferma invece di cadere.
     let ax = (dx - v.x) / GRAB_ACCEL_TAU;
     let ay = (dy - v.y) / GRAB_ACCEL_TAU;
     let az = (dz - v.z) / GRAB_ACCEL_TAU;
-    const ramp = Math.min(1, link.age / Math.max(GRAB_SOFT_RAMP, 1e-3));
-    const aMax = GRAB_MAX_ACCEL * ramp;
+    const ramp = Math.min(1, link.age / Math.max(GRAB_SOFT_RAMP * 0.75, 1e-3));
+    const aMax = GRAB_MAX_ACCEL * 1.35 * ramp;
     const aLen = Math.hypot(ax, ay, az);
     if (aLen > aMax) {
       const s = aMax / Math.max(aLen, 1e-9);
@@ -167,8 +145,6 @@ export async function initPhysics() {
     step(eventQueue, hooks);
   };
 
-  // main.ts elimina le capsule perse nello chute: toglile dal registro e da
-  // eventuali prese attive, altrimenti gli handle WASM restano appesi.
   const removeBody = world.removeRigidBody.bind(world);
   world.removeRigidBody = (body: RAPIER.RigidBody) => {
     const i = tracked.findIndex((c) => c.body.handle === body.handle);
@@ -195,8 +171,6 @@ export async function initPhysics() {
       parent2.isDynamic();
     if (!softClawGrab) return createJoint(params, parent1, parent2, wakeUp);
 
-    // Rope lunghissimo: non vincola nulla, ma claw.ts ha un ImpulseJoint
-    // valido da passare a removeImpulseJoint() quando apre le chele.
     const handle = createJoint(
       RAPIER.JointData.rope(10, params.anchor1, params.anchor2),
       parent1,
@@ -223,8 +197,6 @@ export async function initPhysics() {
   };
 
   if (typeof window !== 'undefined') {
-    // API di diagnostica usata da scripts/physics-check.mjs (e da chi debugga
-    // la fisica dal vivo). Sola lettura: non tocca il mondo.
     (window as unknown as Record<string, unknown>).__physics = {
       time: () => simTime,
       capsules: () =>
@@ -258,8 +230,6 @@ export async function initPhysics() {
             const d = Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z);
             pair = Math.max(pair, a.radius + tracked[j].radius - d);
           }
-          // Il pavimento esiste solo fuori dal buco: sopra il buco una capsula
-          // è legittimamente più in basso del piano di gioco.
           const overGap =
             Math.abs(p.x - field.chuteX) < field.gap / 2 &&
             Math.abs(p.z) < field.gap / 2;
@@ -322,28 +292,29 @@ export function addPlayfield(world: RAPIER.World, w: number, d: number, y: numbe
   wall(-hw - 0.01, 0, 0.01, hd);
   wall(hw + 0.01, 0, 0.01, hd);
 
+  // Divisorio acrilico alto 0.19 m attorno allo chute: impedisce alle capsule della pila
+  // di rotolare dentro il pozzo di consegna, combaciando con la teca visiva di cabinet.ts.
+  const rimHy = CHUTE_WALL_HEIGHT / 2;
   const rim = (cx: number, cz: number, hx: number, hz: number) => {
-    const b = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(cx, y + 0.045, cz));
+    const b = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(cx, y + rimHy, cz));
     world.createCollider(
-      RAPIER.ColliderDesc.cuboid(hx, 0.045, hz)
+      RAPIER.ColliderDesc.cuboid(hx, rimHy, hz)
         .setFriction(CAPSULE_FRICTION)
         .setRestitution(FLOOR_RESTITUTION),
       b
     );
   };
-  rim(gx1 + 0.01, 0, 0.01, gapD / 2 + 0.02);
-  rim(chuteX, gz1 + 0.01, gapW / 2 + 0.02, 0.01);
-  rim(chuteX, gz0 - 0.01, gapW / 2 + 0.02, 0.01);
+  rim(gx1 + 0.008, 0, 0.008, gapD / 2 + 0.016);
+  rim(chuteX, gz1 + 0.008, gapW / 2 + 0.016, 0.008);
+  rim(chuteX, gz0 - 0.008, gapW / 2 + 0.016, 0.008);
 
-  // Pareti del pozzo: funnel corto e verticale, così la capsula non rimbalza
-  // sulla parete ma cade dritta sul fondo.
+  // Pareti interne del pozzo di caduta.
   wall(gx1 + 0.005, 0, 0.005, gapD / 2, y - 0.16, 0.16);
   wall(gx0 - 0.005, 0, 0.005, gapD / 2, y - 0.16, 0.16);
   wall(chuteX, gz1 + 0.005, gapW / 2, 0.005, y - 0.16, 0.16);
   wall(chuteX, gz0 - 0.005, gapW / 2, 0.005, y - 0.16, 0.16);
 
-  // Fondo dello chute: alta frizione e restituzione zero → "tonfo", non una
-  // capsula che scivola per sempre.
+  // Fondo dello chute.
   const bottom = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(chuteX, y - 0.3, 0));
   world.createCollider(
     RAPIER.ColliderDesc.cuboid(gapW / 2, 0.01, gapD / 2)
@@ -369,8 +340,6 @@ export function addCapsule(world: RAPIER.World, spot: Spot, r: number) {
       .setDensity(CAPSULE_DENSITY)
       .setFriction(CAPSULE_FRICTION)
       .setRestitution(CAPSULE_RESTITUTION)
-      // Min: il pavimento o lo chute non possono alzare friction/restitution
-      // oltre i valori della capsula.
       .setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min)
       .setRestitutionCombineRule(RAPIER.CoefficientCombineRule.Min)
       .setContactSkin(CONTACT_SKIN),

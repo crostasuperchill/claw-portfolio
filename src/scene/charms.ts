@@ -5,16 +5,15 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 /**
  * Hanging kawaii acrylic charms inside the cabinet.
  *
- * Each charm has a single-strand silver beaded ball-chain hooked over the
- * rail, a thin translucent frosted acrylic rim die-cut around the gadget
- * silhouette, a cute pastel printed face (Tamagotchi, retro handheld, CRT
- * monitor), and a crisp white label tag hanging underneath.
+ * Each charm has a bright silver beaded ball-chain hooked over the rear rail,
+ * a die-cut frosted acrylic rim, vibrant printed face (Tamagotchi, tilted mint
+ * handheld, royal-blue CRT monitor), crisp white label tag, and a real 2-axis
+ * damped pendulum physics simulation that collides with the claw mechanism so
+ * the arm physically pushes charms aside instead of clipping through them.
  */
 
 export type CharmLabel = {
-  /** Text printed on the white tag, e.g. "Web Dev". */
   text: string;
-  /** Accent colour used by the little tag underline / print. */
   color: string;
 };
 
@@ -25,9 +24,16 @@ export type CharmsOptions = {
   halfWidth: number;
 };
 
+export type CharmObstacle = {
+  x: number;
+  y: number;
+  z: number;
+  r: number;
+};
+
 export type Charms = {
   group: THREE.Group;
-  update(t: number): void;
+  update(t: number, dt?: number, obstacles?: CharmObstacle[]): void;
 };
 
 const TAU = Math.PI * 2;
@@ -35,17 +41,16 @@ const FONT = '"Arial Rounded MT Bold", "Helvetica Neue", Inter, Arial, sans-seri
 const DEG = Math.PI / 180;
 
 /* ------------------------------------------------------------------ */
-/* roles + palette                                                     */
+/* roles + vivid palette                                               */
 /* ------------------------------------------------------------------ */
 
 type Role = 'web' | 'ux' | 'front' | 'other';
 
-/** Body colours sampled from reference/target.png. */
 const BODY: Record<Role, string> = {
-  web: '#f49ac8',
-  ux: '#6fd6d2',
-  front: '#5a7de8',
-  other: '#d3a6f0',
+  web: '#f886c4',
+  ux: '#4cd8d0',
+  front: '#4468ec',
+  other: '#c88ef6',
 };
 
 const ICON: Record<Role, number> = { web: 0, ux: 2, front: 1, other: 3 };
@@ -96,17 +101,13 @@ function ellipse(g: CanvasRenderingContext2D, x: number, y: number, rx: number, 
 /* printed face                                                        */
 /* ------------------------------------------------------------------ */
 
-/**
- * Printed face texture. Logical canvas is 256 x 312, rendered at 2x
- * (512 x 624) for crisp acrylic print under the studio lights.
- */
 function faceTexture(label: CharmLabel, role: Role) {
   return canvasTex(2, 256, 312, (g) => {
     const W = 256;
     const H = 312;
     const base = new THREE.Color(BODY[role]);
-    const top = base.clone().offsetHSL(0, 0.03, 0.1).getStyle();
-    const bottom = base.clone().offsetHSL(0, -0.03, -0.09).getStyle();
+    const top = base.clone().offsetHSL(0, 0.05, 0.09).getStyle();
+    const bottom = base.clone().offsetHSL(0, 0.02, -0.09).getStyle();
 
     const grad = g.createLinearGradient(0, 0, W * 0.45, H);
     grad.addColorStop(0, top);
@@ -114,8 +115,7 @@ function faceTexture(label: CharmLabel, role: Role) {
     g.fillStyle = grad;
     g.fillRect(0, 0, W, H);
 
-    // glossy acrylic inner keyline
-    g.strokeStyle = 'rgba(255,255,255,0.7)';
+    g.strokeStyle = 'rgba(255,255,255,0.78)';
     g.lineWidth = 6;
     roundRect(g, 11, 11, W - 22, H - 22, 24);
     g.stroke();
@@ -123,19 +123,17 @@ function faceTexture(label: CharmLabel, role: Role) {
     const icon = ICON[role];
 
     if (icon === 0) {
-      /* ---------------- Tamagotchi / pocket pet ---------------- */
+      /* ---------------- Tamagotchi / Web Dev ---------------- */
       const cx = W / 2;
       const cy = 150;
 
-      // soft shell shading
       const shell = g.createRadialGradient(cx - 34, cy - 74, 8, cx, cy, 150);
-      shell.addColorStop(0, 'rgba(255,255,255,0.55)');
-      shell.addColorStop(0.55, 'rgba(255,255,255,0.06)');
-      shell.addColorStop(1, 'rgba(120,40,90,0.12)');
+      shell.addColorStop(0, 'rgba(255,255,255,0.52)');
+      shell.addColorStop(0.55, 'rgba(255,255,255,0.05)');
+      shell.addColorStop(1, 'rgba(140,24,84,0.16)');
       g.fillStyle = shell;
       g.fillRect(0, 0, W, H);
 
-      // white scalloped bezel
       g.fillStyle = '#fff8fc';
       for (let i = 0; i < 22; i++) {
         const a = (i / 22) * TAU;
@@ -146,33 +144,29 @@ function faceTexture(label: CharmLabel, role: Role) {
       ellipse(g, cx, 133, 64, 74);
       g.fill();
 
-      // pink inner ring
-      g.strokeStyle = '#f3a6cc';
-      g.lineWidth = 3;
+      g.strokeStyle = '#f282be';
+      g.lineWidth = 3.5;
       ellipse(g, cx, 133, 55, 65);
       g.stroke();
 
-      // mint LCD
-      g.fillStyle = '#b9f5d8';
-      g.strokeStyle = '#5a4a66';
-      g.lineWidth = 3.5;
+      g.fillStyle = '#aaf2ce';
+      g.strokeStyle = '#4e3c5c';
+      g.lineWidth = 4;
       roundRect(g, 72, 98, 112, 74, 12);
       g.fill();
       g.stroke();
 
-      // pixel buddy (cute blob + smile)
-      g.fillStyle = '#254238';
+      g.fillStyle = '#1d3a30';
       g.fillRect(104, 118, 12, 14);
       g.fillRect(140, 118, 12, 14);
       g.fillRect(110, 142, 36, 8);
-      g.fillStyle = '#ff70a6';
+      g.fillStyle = '#ff5c9e';
       g.fillRect(88, 128, 10, 8);
       g.fillRect(158, 128, 10, 8);
-      g.fillStyle = '#7fe0b0';
+      g.fillStyle = '#62d99e';
       g.fillRect(112, 108, 32, 5);
 
-      // 3 little buttons on the shell
-      const btnCols = ['#ff5a96', '#ffe066', '#67c3ff'];
+      const btnCols = ['#ff3d8c', '#ffd628', '#38b2ff'];
       for (let i = 0; i < 3; i++) {
         g.fillStyle = '#ffffff';
         g.beginPath();
@@ -180,43 +174,38 @@ function faceTexture(label: CharmLabel, role: Role) {
         g.fill();
         g.fillStyle = btnCols[i];
         g.beginPath();
-        g.arc(cx - 36 + i * 36, 236, 5.5, 0, TAU);
+        g.arc(cx - 36 + i * 36, 236, 6, 0, TAU);
         g.fill();
       }
     } else if (icon === 1) {
       /* ---------------- Retro CRT / Front-end ---------------- */
-      // monitor shell
-      g.fillStyle = '#4a66d2';
-      g.strokeStyle = 'rgba(255,255,255,0.85)';
+      g.fillStyle = '#3856d6';
+      g.strokeStyle = 'rgba(255,255,255,0.9)';
       g.lineWidth = 5;
       roundRect(g, 26, 32, 204, 172, 20);
       g.fill();
       g.stroke();
 
-      // shell highlight
       const sheen = g.createLinearGradient(0, 32, 0, 204);
-      sheen.addColorStop(0, 'rgba(255,255,255,0.32)');
+      sheen.addColorStop(0, 'rgba(255,255,255,0.34)');
       sheen.addColorStop(0.5, 'rgba(255,255,255,0.02)');
-      sheen.addColorStop(1, 'rgba(20,20,80,0.12)');
+      sheen.addColorStop(1, 'rgba(16,18,74,0.16)');
       g.fillStyle = sheen;
       roundRect(g, 26, 32, 204, 172, 20);
       g.fill();
 
-      // magenta screen
-      g.fillStyle = '#ff7fc2';
+      g.fillStyle = '#ff5cb4';
       roundRect(g, 42, 46, 172, 124, 10);
       g.fill();
 
-      // browser window
-      g.fillStyle = '#fff6fb';
+      g.fillStyle = '#fff5fb';
       roundRect(g, 52, 56, 152, 104, 7);
       g.fill();
 
-      // chrome bar + dots
-      g.fillStyle = '#2b2f55';
+      g.fillStyle = '#242850';
       roundRect(g, 52, 56, 152, 20, 7);
       g.fill();
-      const dots = ['#ff6b8b', '#ffe066', '#7fe0b0'];
+      const dots = ['#ff4d7a', '#ffd628', '#52e09c'];
       for (let i = 0; i < 3; i++) {
         g.fillStyle = dots[i];
         g.beginPath();
@@ -224,30 +213,28 @@ function faceTexture(label: CharmLabel, role: Role) {
         g.fill();
       }
 
-      // code blocks
-      g.fillStyle = '#ff9ecb';
+      g.fillStyle = '#ff72b8';
       roundRect(g, 62, 84, 54, 30, 6);
       g.fill();
-      g.fillStyle = '#75d4ff';
+      g.fillStyle = '#40c2ff';
       roundRect(g, 62, 120, 84, 10, 5);
       g.fill();
-      g.fillStyle = '#c9b8ff';
+      g.fillStyle = '#b49cff';
       roundRect(g, 62, 136, 62, 10, 5);
       g.fill();
-      g.fillStyle = '#7fe0b0';
+      g.fillStyle = '#52e09c';
       roundRect(g, 126, 84, 68, 46, 8);
       g.fill();
-      g.fillStyle = '#2b2f55';
+      g.fillStyle = '#242850';
       roundRect(g, 126, 138, 48, 8, 4);
       g.fill();
 
-      // stand + dark keyboard
-      g.fillStyle = '#232848';
+      g.fillStyle = '#1e2444';
       roundRect(g, 108, 204, 40, 22, 5);
       g.fill();
       roundRect(g, 62, 224, 132, 28, 9);
       g.fill();
-      g.fillStyle = '#4a5080';
+      g.fillStyle = '#4e5688';
       for (let row = 0; row < 2; row++) {
         for (let i = 0; i < 7; i++) {
           roundRect(g, 72 + i * 17, 231 + row * 9, 11, 5, 2);
@@ -256,25 +243,22 @@ function faceTexture(label: CharmLabel, role: Role) {
       }
     } else if (icon === 2) {
       /* ---------------- Mint handheld / UX/UI ---------------- */
-      // device body
-      g.fillStyle = '#55c4bf';
-      g.strokeStyle = 'rgba(255,255,255,0.9)';
+      g.fillStyle = '#3cc8c2';
+      g.strokeStyle = 'rgba(255,255,255,0.92)';
       g.lineWidth = 5;
       roundRect(g, 34, 34, 188, 240, 26);
       g.fill();
       g.stroke();
 
-      // body sheen
       const sheen = g.createLinearGradient(34, 34, 222, 274);
-      sheen.addColorStop(0, 'rgba(255,255,255,0.35)');
+      sheen.addColorStop(0, 'rgba(255,255,255,0.36)');
       sheen.addColorStop(0.55, 'rgba(255,255,255,0.02)');
-      sheen.addColorStop(1, 'rgba(20,90,90,0.14)');
+      sheen.addColorStop(1, 'rgba(14,82,84,0.16)');
       g.fillStyle = sheen;
       roundRect(g, 34, 34, 188, 240, 26);
       g.fill();
 
-      // speaker slots
-      g.fillStyle = '#2c4a52';
+      g.fillStyle = '#224048';
       roundRect(g, 102, 48, 52, 5, 2.5);
       g.fill();
       for (let i = 0; i < 3; i++) {
@@ -282,44 +266,40 @@ function faceTexture(label: CharmLabel, role: Role) {
         g.fill();
       }
 
-      // screen housing
-      g.fillStyle = '#26394a';
+      g.fillStyle = '#203242';
       roundRect(g, 48, 72, 160, 108, 12);
       g.fill();
 
-      // orange screen
-      g.fillStyle = '#ff925c';
+      g.fillStyle = '#ff7d40';
       roundRect(g, 58, 82, 140, 84, 8);
       g.fill();
-      g.fillStyle = '#fff1de';
+      g.fillStyle = '#fff0d8';
       roundRect(g, 66, 90, 124, 68, 5);
       g.fill();
 
-      // tiny header + wireframe content
-      g.fillStyle = '#26394a';
+      g.fillStyle = '#203242';
       roundRect(g, 66, 90, 124, 15, 5);
       g.fill();
-      g.fillStyle = '#ff925c';
+      g.fillStyle = '#ff7d40';
       roundRect(g, 74, 114, 52, 22, 5);
       g.fill();
-      g.fillStyle = '#6fd6d2';
+      g.fillStyle = '#4ad2cc';
       roundRect(g, 132, 114, 48, 22, 5);
       g.fill();
-      g.fillStyle = '#26394a';
+      g.fillStyle = '#203242';
       roundRect(g, 74, 142, 74, 7, 3.5);
       g.fill();
-      g.fillStyle = '#b8c2cc';
+      g.fillStyle = '#a4b2be';
       roundRect(g, 132, 142, 42, 7, 3.5);
       g.fill();
 
-      // D-pad + buttons
-      g.fillStyle = '#27454f';
+      g.fillStyle = '#1e3c46';
       roundRect(g, 66, 196, 62, 16, 6);
       g.fill();
       roundRect(g, 89, 184, 16, 40, 6);
       g.fill();
 
-      const btn = ['#ff8fc0', '#ffe066', '#8ab8ff'];
+      const btn = ['#ff68ae', '#ffd628', '#5aa2ff'];
       for (let i = 0; i < 3; i++) {
         g.fillStyle = btn[i];
         g.beginPath();
@@ -327,12 +307,10 @@ function faceTexture(label: CharmLabel, role: Role) {
         g.fill();
       }
 
-      // bottom status pill
       g.fillStyle = '#ffffff';
       roundRect(g, 76, 246, 104, 14, 7);
       g.fill();
     } else {
-      /* ---------------- 3D Art isometric glossy cube ---------------- */
       const cx = W / 2;
       const cy = H / 2 + 4;
       const r = 82;
@@ -343,34 +321,10 @@ function faceTexture(label: CharmLabel, role: Role) {
         g.closePath();
         g.fill();
       };
-      poly(
-        [
-          [cx, cy - r * 0.72],
-          [cx + r * 0.88, cy - r * 0.3],
-          [cx, cy + r * 0.12],
-          [cx - r * 0.88, cy - r * 0.3],
-        ],
-        '#ffffff'
-      );
-      poly(
-        [
-          [cx - r * 0.88, cy - r * 0.3],
-          [cx, cy + r * 0.12],
-          [cx, cy + r * 0.88],
-          [cx - r * 0.88, cy + r * 0.44],
-        ],
-        '#ffe57f'
-      );
-      poly(
-        [
-          [cx, cy + r * 0.12],
-          [cx + r * 0.88, cy - r * 0.3],
-          [cx + r * 0.88, cy + r * 0.44],
-          [cx, cy + r * 0.88],
-        ],
-        '#7bd7ff'
-      );
-      g.strokeStyle = '#362d54';
+      poly([[cx, cy - r * 0.72], [cx + r * 0.88, cy - r * 0.3], [cx, cy + r * 0.12], [cx - r * 0.88, cy - r * 0.3]], '#ffffff');
+      poly([[cx - r * 0.88, cy - r * 0.3], [cx, cy + r * 0.12], [cx, cy + r * 0.88], [cx - r * 0.88, cy + r * 0.44]], '#ffe052');
+      poly([[cx, cy + r * 0.12], [cx + r * 0.88, cy - r * 0.3], [cx + r * 0.88, cy + r * 0.44], [cx, cy + r * 0.88]], '#4cc8ff');
+      g.strokeStyle = '#30244e';
       g.lineWidth = 6;
       g.lineJoin = 'round';
       g.beginPath();
@@ -390,9 +344,8 @@ function faceTexture(label: CharmLabel, role: Role) {
       g.stroke();
     }
 
-    // top-left laminate highlight
     const gloss = g.createLinearGradient(0, 0, W, H);
-    gloss.addColorStop(0, 'rgba(255,255,255,0.36)');
+    gloss.addColorStop(0, 'rgba(255,255,255,0.34)');
     gloss.addColorStop(0.35, 'rgba(255,255,255,0.04)');
     gloss.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = gloss;
@@ -400,28 +353,28 @@ function faceTexture(label: CharmLabel, role: Role) {
   });
 }
 
-/** Crisp white pill tag: logical 256 x 96, rendered at 2x (512 x 192). */
+/** Crisp frosted white pill tag matching reference/target.png. */
 function tagTexture(text: string, _accent: string) {
-  return canvasTex(2, 256, 96, (g) => {
+  return canvasTex(2, 256, 92, (g) => {
     const W = 256;
-    const H = 96;
+    const H = 92;
 
-    g.fillStyle = '#ffffff';
-    roundRect(g, 2, 2, W - 4, H - 4, 20);
+    g.fillStyle = '#f8fafe';
+    roundRect(g, 3, 3, W - 6, H - 6, 20);
     g.fill();
 
-    g.strokeStyle = '#c4cbd8';
+    g.strokeStyle = 'rgba(130, 146, 174, 0.45)';
     g.lineWidth = 3;
-    roundRect(g, 5, 5, W - 10, H - 10, 17);
+    roundRect(g, 4.5, 4.5, W - 9, H - 9, 18);
     g.stroke();
 
-    let size = 54;
+    let size = 50;
     g.font = `800 ${size}px ${FONT}`;
-    while (g.measureText(text).width > W - 26 && size > 18) {
+    while (g.measureText(text).width > W - 28 && size > 18) {
       size -= 2;
       g.font = `800 ${size}px ${FONT}`;
     }
-    g.fillStyle = '#232836';
+    g.fillStyle = '#202636';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
     g.fillText(text, W / 2, H / 2 + 1);
@@ -432,45 +385,31 @@ function tagTexture(text: string, _accent: string) {
 /* geometry helpers                                                    */
 /* ------------------------------------------------------------------ */
 
-function rodBetween(a: THREE.Vector3, b: THREE.Vector3, radius: number) {
-  const dir = b.clone().sub(a);
-  const len = dir.length();
-  const geo = new THREE.CylinderGeometry(radius, radius, len, 5, 1);
-  geo.translate(0, -len / 2, 0);
-  const q = new THREE.Quaternion().setFromUnitVectors(
-    new THREE.Vector3(0, -1, 0),
-    dir.normalize()
-  );
-  geo.applyQuaternion(q);
-  geo.translate(a.x, a.y, a.z);
-  return geo;
-}
-
 /**
- * Single-strand silver beaded ball-chain: fine beads, a small loop over the
- * top rail, and a jump-ring at the bottom, like the neat chains in
- * reference/target.png.
+ * Bright, legible silver beaded ball-chain loop like reference/target.png.
+ * Two slim beaded strands converge from a top loop down to the jump-ring so
+ * the chain reads clearly at normal viewing distance.
  */
 function chainGeometry(length: number) {
   const parts: THREE.BufferGeometry[] = [];
-  const top = new THREE.Vector3(0, 0, 0);
-  const bottom = new THREE.Vector3(0, -length, 0);
+  const beadR = 0.0032;
+  const spacing = 0.0072;
+  const beads = Math.max(4, Math.round(length / spacing));
 
-  // slim core wire so the chain reads continuous between beads
-  parts.push(rodBetween(top, bottom, 0.0006));
-
-  const beadR = 0.0022;
-  const spacing = 0.0065;
-  const beads = Math.max(2, Math.round(length / spacing));
-  for (let i = 1; i < beads; i++) {
-    const p = top.clone().lerp(bottom, i / beads);
-    const bead = new THREE.SphereGeometry(beadR, 6, 5);
-    bead.translate(p.x, p.y, p.z);
-    parts.push(bead);
+  // Two gently arched loop strands (front/back slight spread) like a real ball-chain keychain
+  for (const side of [-1, 1]) {
+    for (let i = 0; i <= beads; i++) {
+      const u = i / beads;
+      const spread = Math.sin(Math.PI * u) * 0.0085 * side;
+      const y = -u * length;
+      const bead = new THREE.SphereGeometry(beadR, 7, 6);
+      bead.translate(spread, y, 0);
+      parts.push(bead);
+    }
   }
 
-  // small clasp ring hooked over the rail
-  const railLoop = new THREE.TorusGeometry(0.0038, 0.0009, 5, 14);
+  // Top clasp ring hooked over the gantry bar
+  const railLoop = new THREE.TorusGeometry(0.0055, 0.0014, 6, 14);
   parts.push(railLoop);
 
   return parts;
@@ -499,7 +438,6 @@ function ellipseShape(rx: number, ry: number) {
   return s;
 }
 
-/** Extruded die-cut acrylic plate, centred on z = 0. */
 function acrylicPlate(shape: THREE.Shape, depth: number) {
   const g = new THREE.ExtrudeGeometry(shape, {
     depth,
@@ -518,50 +456,69 @@ function acrylicPlate(shape: THREE.Shape, depth: number) {
 /* placement                                                           */
 /* ------------------------------------------------------------------ */
 
-type Placement = { xn: number; chain: number };
+type Placement = { xn: number; chain: number; restTilt: number };
 
-/**
- * Positions are expressed as fractions of `halfWidth` and match the
- * reference: the three charms sit to the right of the claw, with the
- * UX/UI one hanging on a longer chain in the middle.
- */
 function placementsFor(labels: CharmLabel[]): Placement[] {
   const n = labels.length;
   const roles = labels.map((l) => detectRole(l.text));
 
   if (n === 3) {
+    // Mirrors reference/target.png: Web Dev left, UX/UI hanging lower and tilted clockwise in middle, Front-end right.
     const map: Record<Role, Placement> = {
-      web: { xn: 0.04, chain: 0.046 },
-      ux: { xn: 0.44, chain: 0.088 },
-      front: { xn: 0.84, chain: 0.05 },
-      other: { xn: 0.62, chain: 0.07 },
+      web: { xn: 0.02, chain: 0.105, restTilt: 0.015 },
+      ux: { xn: 0.44, chain: 0.145, restTilt: -0.16 },
+      front: { xn: 0.86, chain: 0.102, restTilt: -0.01 },
+      other: { xn: 0.62, chain: 0.135, restTilt: 0.02 },
     };
     return roles.map((r) => map[r]);
   }
 
   if (n === 4) {
     const map: Record<Role, Placement> = {
-      web: { xn: 0.13, chain: 0.068 },
-      ux: { xn: 0.43, chain: 0.135 },
-      other: { xn: 0.68, chain: 0.1 },
-      front: { xn: 0.96, chain: 0.072 },
+      web: { xn: 0.13, chain: 0.068, restTilt: 0.02 },
+      ux: { xn: 0.43, chain: 0.135, restTilt: -0.15 },
+      other: { xn: 0.68, chain: 0.1, restTilt: 0.03 },
+      front: { xn: 0.96, chain: 0.072, restTilt: -0.02 },
     };
     return roles.map((r) => map[r]);
   }
 
-  const chains = [0.068, 0.135, 0.092, 0.104];
-  if (n === 1) return [{ xn: 0.3, chain: 0.068 }];
+  const chains = [0.068, 0.125, 0.088, 0.104];
+  if (n === 1) return [{ xn: 0.3, chain: 0.068, restTilt: 0 }];
   if (n === 2) {
     return [
-      { xn: -0.15, chain: 0.068 },
-      { xn: 0.55, chain: 0.11 },
+      { xn: -0.15, chain: 0.068, restTilt: 0.02 },
+      { xn: 0.55, chain: 0.11, restTilt: -0.06 },
     ];
   }
   return labels.map((_, i) => ({
     xn: -0.6 + (1.6 * i) / (n - 1),
     chain: chains[i % chains.length],
+    restTilt: (i % 2 ? -1 : 1) * 0.03,
   }));
 }
+
+/* ------------------------------------------------------------------ */
+/* pendulum simulation state                                           */
+/* ------------------------------------------------------------------ */
+
+type CharmBody = {
+  pivot: THREE.Group;
+  px: number;
+  py: number;
+  pz: number;
+  restTilt: number;
+  phase: number;
+  rotX: number;
+  rotZ: number;
+  velX: number;
+  velZ: number;
+  /** Local vertical offsets + bounding radii of sample spheres along the hanging charm. */
+  samples: { y: number; r: number }[];
+};
+
+const _v = new THREE.Vector3();
+const _euler = new THREE.Euler(0, 0, 0, 'XYZ');
 
 /* ------------------------------------------------------------------ */
 /* public API                                                          */
@@ -573,37 +530,37 @@ export function buildCharms(opts: CharmsOptions): Charms {
   group.name = 'charms';
 
   const rimMat = new THREE.MeshPhysicalMaterial({
-    color: '#eef6ff',
-    roughness: 0.25,
+    color: '#eef7ff',
+    roughness: 0.18,
     metalness: 0,
     transparent: true,
-    opacity: 0.52,
-    clearcoat: 0.35,
-    clearcoatRoughness: 0.25,
-    envMapIntensity: 1.0,
+    opacity: 0.58,
+    clearcoat: 0.55,
+    clearcoatRoughness: 0.15,
+    envMapIntensity: 1.25,
     depthWrite: false,
   });
   const tagMat = new THREE.MeshPhysicalMaterial({
     color: '#ffffff',
-    roughness: 0.16,
+    roughness: 0.14,
     metalness: 0.02,
-    clearcoat: 0.55,
-    clearcoatRoughness: 0.2,
-    envMapIntensity: 1.1,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.16,
+    envMapIntensity: 1.2,
   });
   const chromeMat = new THREE.MeshStandardMaterial({
-    color: '#e8eef5',
-    metalness: 0.82,
-    roughness: 0.2,
-    envMapIntensity: 1.5,
+    color: '#f2f6fc',
+    metalness: 0.9,
+    roughness: 0.14,
+    envMapIntensity: 1.65,
   });
 
   const roles = labels.map((l) => detectRole(l.text));
   const placements = placementsFor(labels);
-  const pivots: THREE.Group[] = [];
+  const bodies: CharmBody[] = [];
 
-  const tagW = 0.108;
-  const tagH = 0.034;
+  const tagW = 0.106;
+  const tagH = 0.032;
   const tagPlaneGeo = new THREE.PlaneGeometry(tagW - 0.005, tagH - 0.005);
   const tagGeo = new RoundedBoxGeometry(tagW, tagH, 0.0044, 2, 0.008);
   const tagGeoNI = tagGeo.index ? tagGeo.toNonIndexed() : tagGeo;
@@ -614,20 +571,17 @@ export function buildCharms(opts: CharmsOptions): Charms {
     const placement = placements[i];
 
     const pivot = new THREE.Group();
-    const jitter = ((i % 2 ? 1 : -1) * (0.003 + i * 0.0012));
-    pivot.position.set(halfWidth * placement.xn + jitter, topY, z);
-    const tilt = (i % 2 ? -1 : 1) * (0.012 + (i % 3) * 0.005);
-    pivot.rotation.z = tilt;
-    pivot.userData.tilt = tilt;
-    pivot.userData.phase = i * 1.37;
+    const px = halfWidth * placement.xn;
+    const py = topY;
+    const pz = z;
+    pivot.position.set(px, py, pz);
+    pivot.rotation.z = placement.restTilt;
     group.add(pivot);
-    pivots.push(pivot);
 
-    // die-cut silhouette: egg for the Tamagotchi, rounded plate otherwise
-    const badgeW = icon === 0 ? 0.074 : 0.08;
-    const badgeH = icon === 0 ? 0.106 : 0.096;
-    const rimW = badgeW + 0.006;
-    const rimH = badgeH + 0.006;
+    const badgeW = icon === 0 ? 0.076 : 0.082;
+    const badgeH = icon === 0 ? 0.106 : 0.098;
+    const rimW = badgeW + 0.008;
+    const rimH = badgeH + 0.008;
 
     const chainLen = placement.chain;
     const badgeY = -chainLen - 0.008 - rimH / 2;
@@ -636,24 +590,22 @@ export function buildCharms(opts: CharmsOptions): Charms {
     const tagY = badgeBottom - 0.007 - tagH / 2;
     const tagTop = tagY + tagH / 2;
 
-    // silver hardware
+    // Gleaming silver ball-chain + jump rings
     const chromeParts = chainGeometry(chainLen);
     const ring = (r: number, y: number) => {
-      const t = new THREE.TorusGeometry(r, 0.0011, 5, 12);
+      const t = new THREE.TorusGeometry(r, 0.0013, 6, 14);
       t.translate(0, y, 0);
       return t;
     };
-    chromeParts.push(ring(0.0038, -chainLen - 0.001));
-    chromeParts.push(ring(0.0034, badgeTop - 0.0015));
-    chromeParts.push(ring(0.0032, badgeBottom - 0.0015));
-    chromeParts.push(ring(0.0038, (badgeBottom + tagTop) / 2));
-    chromeParts.push(ring(0.0032, tagTop + 0.0015));
-    // mix of indexed primitives + non-indexed RoundedBoxGeometry: normalise
+    chromeParts.push(ring(0.0044, -chainLen - 0.001));
+    chromeParts.push(ring(0.0038, badgeTop - 0.0015));
+    chromeParts.push(ring(0.0036, badgeBottom - 0.0015));
+    chromeParts.push(ring(0.004, (badgeBottom + tagTop) / 2));
+    chromeParts.push(ring(0.0036, tagTop + 0.0015));
     const chromeFlat = chromeParts.map((p) => (p.index ? p.toNonIndexed() : p));
-    const chrome = new THREE.Mesh(mergeGeometries(chromeFlat, false)!, chromeMat);
-    pivot.add(chrome);
+    const chromeMesh = new THREE.Mesh(mergeGeometries(chromeFlat, false)!, chromeMat);
+    pivot.add(chromeMesh);
 
-    // white acrylic rim + crisp pill tag
     const rimShape =
       icon === 0 ? ellipseShape(rimW / 2, rimH / 2) : roundedRectShape(rimW, rimH, 0.014);
     const rimGeo = acrylicPlate(rimShape, 0.006);
@@ -661,13 +613,11 @@ export function buildCharms(opts: CharmsOptions): Charms {
     const rim = new THREE.Mesh(rimGeo, rimMat);
     pivot.add(rim);
 
-    // crisp opaque white pill tag below the acrylic badge
     const tagBox = tagGeoNI.clone();
     tagBox.translate(0, tagY, 0);
     const tagPlate = new THREE.Mesh(tagBox, tagMat);
     pivot.add(tagPlate);
 
-    // printed face
     let faceGeo: THREE.BufferGeometry;
     if (icon === 0) {
       faceGeo = new THREE.CircleGeometry(0.5, 64);
@@ -675,41 +625,133 @@ export function buildCharms(opts: CharmsOptions): Charms {
     } else {
       faceGeo = new THREE.PlaneGeometry(badgeW, badgeH);
     }
-    const face = new THREE.Mesh(
-      faceGeo,
-      new THREE.MeshStandardMaterial({
-        map: faceTexture(label, role),
-        roughness: 0.22,
-        metalness: 0,
-        envMapIntensity: 0.9,
-      })
-    );
-    face.position.set(0, badgeY, 0.0052);
+    const faceMat = new THREE.MeshStandardMaterial({
+      map: faceTexture(label, role),
+      roughness: 0.2,
+      metalness: 0,
+      envMapIntensity: 0.9,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    });
+    const face = new THREE.Mesh(faceGeo, faceMat);
+    face.position.set(0, badgeY, 0.0056);
     pivot.add(face);
+
+    // Back face so when the charm swings away from the claw it doesn't disappear from behind
+    const faceBack = new THREE.Mesh(faceGeo, faceMat);
+    faceBack.position.set(0, badgeY, -0.0056);
+    faceBack.rotation.y = Math.PI;
+    pivot.add(faceBack);
 
     const tag = new THREE.Mesh(
       tagPlaneGeo,
       new THREE.MeshStandardMaterial({
         map: tagTexture(label.text, label.color),
-        roughness: 0.3,
+        roughness: 0.26,
         metalness: 0,
         envMapIntensity: 0.7,
+        polygonOffset: true,
+        polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2,
       })
     );
-    tag.position.set(0, tagY, 0.0028);
+    tag.position.set(0, tagY, 0.0036);
     pivot.add(tag);
+
+    bodies.push({
+      pivot,
+      px,
+      py,
+      pz,
+      restTilt: placement.restTilt,
+      phase: i * 1.43,
+      rotX: 0,
+      rotZ: placement.restTilt,
+      velX: 0,
+      velZ: 0,
+      samples: [
+        { y: -chainLen * 0.65, r: 0.016 },
+        { y: badgeY, r: Math.max(badgeW, badgeH) * 0.52 },
+        { y: tagY, r: tagW * 0.44 },
+      ],
+    });
   });
 
-  // Gentle, continuous breeze sway (~1.5°) — never decays to a dead stop.
-  const AMP = 1.5 * DEG;
-  const update = (t: number) => {
-    for (const p of pivots) {
-      const phase = p.userData.phase as number;
-      const sway =
-        AMP *
-        (0.78 * Math.sin(t * 0.55 + phase) + 0.22 * Math.sin(t * 0.91 + phase * 1.7));
-      p.rotation.z = (p.userData.tilt as number) + sway;
-      p.rotation.x = AMP * 0.25 * Math.sin(t * 0.47 + phase * 1.31);
+  // Real damped 2-axis pendulum simulation + collision against claw obstacles.
+  const BREEZE_AMP = 1.4 * DEG;
+  const OMEGA = 6.4;
+  const ZETA = 0.26;
+  const MAX_ANG = 68 * DEG;
+
+  const update = (t: number, dt = 1 / 60, obstacles: CharmObstacle[] = []) => {
+    const step = Math.min(0.04, Math.max(0.001, dt));
+    const subSteps = Math.max(1, Math.ceil(step * 120));
+    const h = step / subSteps;
+
+    for (const b of bodies) {
+      const targetZ =
+        b.restTilt +
+        BREEZE_AMP * (0.78 * Math.sin(t * 0.62 + b.phase) + 0.22 * Math.sin(t * 1.03 + b.phase * 1.7));
+      const targetX = BREEZE_AMP * 0.3 * Math.sin(t * 0.51 + b.phase * 1.31);
+
+      for (let s = 0; s < subSteps; s++) {
+        // Gravity + chain spring restoring torque
+        const accZ = OMEGA * OMEGA * (targetZ - b.rotZ) - 2 * ZETA * OMEGA * b.velZ;
+        const accX = OMEGA * OMEGA * (targetX - b.rotX) - 2 * ZETA * OMEGA * b.velX;
+        b.velZ += accZ * h;
+        b.velX += accX * h;
+        b.rotZ += b.velZ * h;
+        b.rotX += b.velX * h;
+
+        // Resolve sphere collisions against every part of the claw mechanism
+        if (obstacles.length) {
+          _euler.set(b.rotX, 0, b.rotZ, 'XYZ');
+          for (const sample of b.samples) {
+            _v.set(0, sample.y, 0).applyEuler(_euler);
+            const sx = b.px + _v.x;
+            const sy = b.py + _v.y;
+            const sz = b.pz + _v.z;
+            const armLen = Math.max(0.04, Math.abs(sample.y));
+
+            for (const obs of obstacles) {
+              const dx = sx - obs.x;
+              const dy = sy - obs.y;
+              const dz = sz - obs.z;
+              const minDist = sample.r + obs.r;
+              const distSq = dx * dx + dy * dy + dz * dz;
+              if (distSq < minDist * minDist) {
+                const dist = Math.sqrt(Math.max(1e-8, distSq));
+                const pen = minDist - dist;
+                // Push direction away from the claw; if nearly concentric, bias away in -Z/+X
+                let nx = dist > 1e-4 ? dx / dist : 0.4;
+                let nz = dist > 1e-4 ? dz / dist : -0.9;
+                const horiz = Math.hypot(nx, nz);
+                if (horiz < 0.25) {
+                  nx = sx >= obs.x ? 0.7 : -0.7;
+                  nz = sz <= obs.z ? -0.7 : 0.7;
+                }
+                // Positive rotZ swings bottom (-Y) toward +X; negative rotX swings bottom (-Y) toward +Z
+                const dRotZ = (nx * pen) / armLen;
+                const dRotX = (-nz * pen) / armLen;
+                b.rotZ += dRotZ * 0.92;
+                b.rotX += dRotX * 0.92;
+                b.velZ += (dRotZ / h) * 0.22;
+                b.velX += (dRotX / h) * 0.22;
+              }
+            }
+          }
+        }
+
+        // Clamp angular swing so chains never flip upside-down or hit the back glass
+        b.rotZ = THREE.MathUtils.clamp(b.rotZ, -MAX_ANG, MAX_ANG);
+        b.rotX = THREE.MathUtils.clamp(b.rotX, -MAX_ANG * 0.85, MAX_ANG * 0.85);
+        b.velZ = THREE.MathUtils.clamp(b.velZ, -8, 8);
+        b.velX = THREE.MathUtils.clamp(b.velX, -8, 8);
+      }
+
+      b.pivot.rotation.z = b.rotZ;
+      b.pivot.rotation.x = b.rotX;
     }
   };
 
